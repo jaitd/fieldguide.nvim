@@ -1,7 +1,7 @@
--- Verb: `reload` (§5.10) — the privileged act.
+-- Verb: `reload` — the privileged act.
 --
 -- This executes agent-authored code in an unsandboxed process. That is inherent
--- to the feature and it is not gated, at the default level, by anything (§6).
+-- to the feature and it is not gated, at the default level, by anything.
 -- `verify` is not the gate: it cannot see deferred payloads.
 --
 -- It is also not the headline verb. In a typical config, plugin specs are most

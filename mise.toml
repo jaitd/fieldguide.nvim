@@ -2,7 +2,7 @@
 
 # Neovim and node are deliberately NOT pinned here.
 #
-# v1 drives the `pi` and the `nvim` already on PATH (§5.2), and verify boots the
+# fieldguide drives the `pi` and the `nvim` already on PATH, and verify boots the
 # *user's* editor — pinning either would mean testing a Neovim the user does not
 # run. Minimums are asserted at launch instead, with a readable failure:
 #
@@ -17,7 +17,7 @@ stylua = "latest"
 lefthook = "latest"
 
 [tasks.test]
-description = "Everything, roughly in the order §8 ranks it by how much it matters"
+description = "The whole suite, most security-relevant first"
 depends = [
   "test:gate",
   "test:extension",
@@ -35,10 +35,9 @@ depends = [
   "test:bridge",
 ]
 
-# The path gate goes first: it is the security-relevant suite, and §9 puts it
-# before any write tool is enabled, not after.
+# The path gate goes first: it is the security-relevant suite.
 [tasks."test:gate"]
-description = "Three-zone path gate — the table from §8"
+description = "Three-zone path gate table"
 run = "node --test tests/gate.test.ts"
 
 [tasks."test:extension"]
@@ -82,11 +81,11 @@ description = "Moving through the transcript, and the commands in it"
 run = "nvim -l tests/reading.lua"
 
 [tasks."test:verify"]
-description = "verify fixtures, including the §6 payload regression test"
+description = "verify fixtures, including the deferred-payload test"
 run = "nvim -l tests/verify.lua"
 
 [tasks."test:shadow"]
-description = "Shadow repo across the three topologies from §4"
+description = "Shadow repo across the three config-repo layouts"
 run = "nvim -l tests/shadow.lua"
 
 [tasks."test:bridge"]

@@ -1,4 +1,4 @@
--- Verb: `explain_keymap` (§5.8) — the join, shipped as one verb rather than
+-- Verb: `explain_keymap` — the join, shipped as one verb rather than
 -- three the agent has to assemble.
 --
 -- `nvim_get_keymap` has no source location; `:verbose map` does. Keymap

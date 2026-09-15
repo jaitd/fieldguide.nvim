@@ -1,9 +1,9 @@
--- The §4 fixture, kept as a regression test on the *documentation* of §6.
+-- A config whose payloads only run after startup.
 --
 -- Three deferred payloads: a BufWritePost autocmd, a keymap RHS, and a 500ms
 -- defer_fn. `verify` boots and quits, so none of them execute and it reports a
--- clean boot. That is the honest limit of the mechanism, and this fixture
--- exists so nobody later mistakes `verify` for a security gate.
+-- clean boot. This is the documented limit of `verify`: it is not a security
+-- gate, and this fixture keeps that behaviour tested.
 --
 -- If any of these ever fire, the marker lands in :messages and the probe
 -- captures it — so the test detects execution rather than assuming absence.

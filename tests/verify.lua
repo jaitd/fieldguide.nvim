@@ -1,4 +1,4 @@
--- verify fixtures (§8). Run headlessly, no test framework beyond `assert`:
+-- verify fixtures. Run headlessly, no test framework beyond `assert`:
 --
 --   nvim -l tests/verify.lua
 --
@@ -78,7 +78,7 @@ do
   check("hangs: reported as a timeout", r.timed_out == true or r.ok == false, vim.inspect(r))
 end
 
--- 6. THE DOCUMENTATION TEST (§6). Deferred payloads do not execute under a
+-- 6. THE DOCUMENTATION TEST. Deferred payloads do not execute under a
 --    verify boot, so verify reports clean. It is a correctness control. Never a
 --    security one. If this test ever starts failing because the payloads ran,
 --    that is a change in nvim's behaviour, not a fix.

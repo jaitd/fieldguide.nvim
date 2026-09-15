@@ -47,7 +47,7 @@ function M.argv(opts)
   -- Without this the agent is a general coding assistant that happens to have
   -- our tools, and answers questions about this editor from training data.
   vim.list_extend(argv, { "--append-system-prompt", root .. "/prompt/system.md" })
-  -- Same hermetic posture as the sidebar (§5.2): our extension and nothing
+  -- Same hermetic posture as the sidebar: our extension and nothing
   -- else, but AGENTS.md discovery left on. Without this the panel would run a
   -- plain agent with no fieldguide verbs at all.
   vim.list_extend(argv, {

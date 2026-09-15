@@ -1,4 +1,4 @@
-# Rebuilds the plugin index (§12) and publishes it as a release asset.
+# Rebuilds the plugin index and publishes it as a release asset.
 #
 # Weekly, because what changes here is the shape of the ecosystem — plugins
 # appearing, repositories being archived, maintainers naming a successor — and

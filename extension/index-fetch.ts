@@ -1,4 +1,4 @@
-// Fetching and replacing the plugin index (§12).
+// Fetching and replacing the plugin index.
 //
 //   node extension/index-fetch.ts <dest> [--repo owner/name] [--max-age-days N]
 //

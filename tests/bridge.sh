@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bridge verbs over RPC (§8): headless nvim, driven through bin/fieldguide,
+# Bridge verbs over RPC: headless nvim, driven through bin/fieldguide,
 # asserting on the JSON. Runs against *this machine's* real config, because the
 # docs resolver's whole claim is that it answers from what is actually
 # installed — a synthetic fixture would test the parser and skip the point.

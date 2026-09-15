@@ -1,4 +1,4 @@
-// The publish gate (§12): does a fresh crawl differ from the published index
+// The publish gate: does a fresh crawl differ from the published index
 // in a way anyone would notice?
 //
 // It decides whether a build replaces the index everyone downloads, so both

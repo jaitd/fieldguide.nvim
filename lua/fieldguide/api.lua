@@ -1,4 +1,4 @@
--- The bridge (§5.3). A single RPC entry point over a closed table.
+-- The bridge. A single RPC entry point over a closed table.
 --
 -- Narrow is enforced here, in Neovim, not requested in a prompt. The client
 -- invokes this with the verb name as *data*; there is no path from agent input
@@ -34,7 +34,7 @@ local VERBS = {
   end,
   -- Internal halves of `verify`: the CLI plans and interprets, but spawns and
   -- waits on the sandboxed boot itself, so the boot never blocks the editor's
-  -- RPC handler (§5.9 — see bin/fieldguide). Not in agent_verbs: the agent
+  -- RPC handler (see bin/fieldguide). Not in agent_verbs: the agent
   -- only ever sees the combined `verify` verb.
   verify_plan = function(args)
     return require("fieldguide.verify").plan(args)

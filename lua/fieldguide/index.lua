@@ -1,4 +1,4 @@
--- Fetching the plugin index (§12).
+-- Fetching the plugin index.
 --
 -- Opt-in, always. The index is a multi-megabyte download from a GitHub release
 -- and nothing here touches the network until someone runs `:FieldguideIndex`

@@ -1,4 +1,4 @@
--- Verb: `state` (§5.6). Parameterized and composable; expensive sections opt-in.
+-- Verb: `state`. Parameterized and composable; expensive sections opt-in.
 --
 -- Paths are emitted *relative to the config dir* so that state output and the
 -- agent's file tools speak the same language.

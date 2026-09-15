@@ -7,7 +7,7 @@
 //
 // The extension imports `typebox` and pi's own types, which live inside pi's
 // install rather than this repo — there is no npm install here, by design
-// (§5.2). So the test resolves them the way pi's launcher does, through jiti,
+//. So the test resolves them the way pi's launcher does, through jiti,
 // and skips itself with a readable reason when pi is not installed.
 
 import assert from "node:assert/strict";
