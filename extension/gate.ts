@@ -1,4 +1,4 @@
-// The three-zone path gate (§5.5), as a pure function so it can be tested
+// The three-zone path gate, as a pure function so it can be tested
 // without a pi session. This is the security-relevant code in the extension.
 //
 // | Zone            | Access    | Contents                                    |

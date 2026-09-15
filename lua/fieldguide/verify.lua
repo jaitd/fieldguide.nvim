@@ -1,7 +1,7 @@
--- Verb: `verify` (§5.9) — a sandboxed headless boot of the working tree as it
+-- Verb: `verify` — a sandboxed headless boot of the working tree as it
 -- is on disk. The feedback loop.
 --
--- NOT a security control (§6). It boots and quits, so autocmd callbacks, keymap
+-- NOT a security control. It boots and quits, so autocmd callbacks, keymap
 -- RHS, `on_attach`, `defer_fn` and plugin `config` functions never run. A
 -- payload in any of those returns "boot ok". `verify` answers "does this boot",
 -- and nothing else.
@@ -23,7 +23,7 @@ local function plugin_root()
 end
 
 -- Signals that code inside the sandbox tried to leave it. An alarm, not a gate
--- (§6): it only observes code that ran, so it catches accidents and naive
+--: it only observes code that ran, so it catches accidents and naive
 -- payloads and nothing sophisticated. It must never discard the agent's work.
 local ESCAPE_PATTERNS = {
   { pattern = "Network is unreachable", kind = "network" },
@@ -65,10 +65,10 @@ local function local_plugin_dirs()
   return out
 end
 
--- Which sandbox this machine has. bwrap is the reference implementation and
--- the one §6 describes; seatbelt (`sandbox-exec`) is the macOS stand-in, and
--- the two do not isolate the same way — see `seatbelt_plan` for what is and is
--- not equivalent. `verify.sandbox` pins one; "auto" picks by OS.
+-- Which sandbox this machine has. bwrap is the reference implementation;
+-- seatbelt (`sandbox-exec`) is the macOS backend, and the two do not isolate
+-- the same way — see `seatbelt_plan` for what is and is not equivalent.
+-- `verify.sandbox` pins one; "auto" picks by OS.
 ---@return string? backend, string? err
 local function backend()
   local want = cfg.options.verify.sandbox or "auto"
@@ -114,7 +114,7 @@ local SANDBOX_PROBE = "/tmp/fieldguide-probe.lua"
 
 ---Minimal environment. `NVIM` and `FIELDGUIDE_ADDR` are absent by
 ---construction, so nothing inside the sandbox can reach back to the live editor
----even if the tool list is loosened later (§6).
+---even if the tool list is loosened later.
 ---
 ---Deliberately *no* FIELDGUIDE_VERIFY marker: a config could branch on it, and
 ---a flag that lets a payload skip verification is worse than no flag.
@@ -250,7 +250,7 @@ local function sbpl(path)
   return '"' .. path:gsub('[\\"]', "\\%0") .. '"'
 end
 
----macOS. `sandbox-exec` is not bwrap and this is not the same sandbox (§6):
+---macOS. `sandbox-exec` is not bwrap and this is not the same sandbox:
 ---seatbelt has no mount namespace, so nothing is *bound* anywhere and nothing
 ---is a tmpfs. The boot starts with the whole machine and has things taken away
 ---from it, which is the opposite direction of travel and worth saying out loud:
@@ -471,7 +471,7 @@ function M.plan(args)
     timeout_ms = args.timeout_ms or cfg.options.verify.timeout_ms,
     -- Paths a run of this plan must remove once it is done with them — the
     -- caller who spawns the process is the one who cleans up, not `plan`
-    -- itself (§ design: the CLI runs the child, so the CLI does this).
+    -- itself (the CLI runs the child, so the CLI does this).
     temp = plan.temp or {},
   }
 end
@@ -602,7 +602,7 @@ end
 ---Test-only: build a sandbox plan without spawning anything, so a test can
 ---inspect the argv list — e.g. that a stow-style config's link targets are
 ---bound — on a machine that may not even have the backend installed. Not
----part of the verb surface (§6): the verb itself takes no backend argument.
+---part of the verb surface: the verb itself takes no backend argument.
 ---@param which "bwrap"|"seatbelt"
 ---@param config_dir string
 ---@return table plan

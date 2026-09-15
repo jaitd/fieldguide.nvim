@@ -1,4 +1,4 @@
-// The path gate test table (§8). The security-relevant test, and the one worth
+// The path gate test table. The security-relevant test, and the one worth
 // writing first — before any write tool is enabled, not after.
 //
 //   node --test tests/gate.test.ts
@@ -14,7 +14,7 @@ import { after, before, test } from "node:test";
 
 import { checkAccess, type Zones } from "../extension/gate.ts";
 
-// A fixture that reproduces the two topologies §4 says cannot be assumed away:
+// A fixture that reproduces the two dotfile layouts the gate has to handle:
 // the config dir is a symlink into a larger repo, and that repo holds files the
 // agent must never reach.
 //

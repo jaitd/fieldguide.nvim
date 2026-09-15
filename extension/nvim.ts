@@ -1,4 +1,4 @@
-// fieldguide's pi extension (§5.5, §5.10).
+// fieldguide's pi extension.
 //
 // Three jobs, in order of how much they matter:
 //
@@ -30,7 +30,7 @@ const DOC_ROOTS = (process.env.FIELDGUIDE_DOC_ROOTS || "").split(":").filter(Boo
 const VERBS = new Set((process.env.FIELDGUIDE_VERBS || "").split(",").filter(Boolean));
 const RELOAD_LEVEL = process.env.FIELDGUIDE_RELOAD_LEVEL || "auto";
 const CALL_TIMEOUT_MS = Number(process.env.FIELDGUIDE_CALL_TIMEOUT_MS) || 60_000;
-// The plugin index (§12), if this machine has one. Absent is the normal case:
+// The plugin index, if this machine has one. Absent is the normal case:
 // the two tools below are simply not registered, exactly as a disabled verb is.
 const PLUGIN_INDEX = process.env.FIELDGUIDE_PLUGIN_INDEX || "";
 
@@ -121,7 +121,7 @@ function asToolResult(verb: string, res: VerbResult) {
 // ---------------------------------------------------------------------------
 
 export default function (pi: ExtensionAPI) {
-  // -- 1. The gate (§5.5) ---------------------------------------------------
+  // -- 1. The gate ---------------------------------------------------
 
   pi.on("tool_call", async (event, ctx) => {
     const zones: Zones = { cwd: ctx.cwd, configRoot: CONFIG_ROOT, docRoots: DOC_ROOTS };
@@ -144,7 +144,7 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // -- 2. Auto-verify on write (§5.9) --------------------------------------
+  // -- 2. Auto-verify on write --------------------------------------
 
   pi.on("tool_result", async (event, ctx) => {
     if (!WRITE_TOOLS.has(event.toolName) || event.isError) return;
@@ -156,7 +156,7 @@ export default function (pi: ExtensionAPI) {
     const target = await resolveTarget(ctx.cwd, raws[0]);
     if (!isUnder(target, CONFIG_ROOT)) return;
 
-    // Every agent write auto-commits to the shadow repo (§5.11). Undo is a git
+    // Every agent write auto-commits to the shadow repo. Undo is a git
     // checkout away and the user's real repo never sees it.
     const checkpoint = await callVerb("checkpoint", { label: `${event.toolName} ${path.basename(target)}` }, ctx.signal);
 
@@ -294,7 +294,7 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  // -- 4. The plugin index (§12) --------------------------------------------
+  // -- 4. The plugin index --------------------------------------------
   //
   // Everything above answers from the editor in front of us. These two answer
   // about plugins that are *not* installed, which is the one question the live

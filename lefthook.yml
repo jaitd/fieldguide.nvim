@@ -15,7 +15,7 @@ pre-commit:
       # line, and the deliberately unparseable fixture is one of them.
       run: mise exec -- stylua --check --respect-ignores {staged_files}
     gate:
-      # The security-relevant suite (§9), and the one worth failing a commit
+      # The security-relevant suite, and the one worth failing a commit
       # over rather than discovering later.
       glob: "{extension/*.ts,tests/gate.test.ts}"
       run: mise exec -- node --test tests/gate.test.ts

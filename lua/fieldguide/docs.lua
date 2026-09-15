@@ -1,4 +1,4 @@
--- Verb: `docs` (§5.7) — the resolver. The differentiated piece.
+-- Verb: `docs` — the resolver. The differentiated piece.
 --
 -- Resolution only. Retrieval is `read`/`grep` on the doc zone, or the opt-in
 -- `fetch` slice below. Scoped to *installed* plugins at their *resolved

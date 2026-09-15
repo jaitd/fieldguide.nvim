@@ -1,4 +1,4 @@
--- The shadow repo (§5.11) — undo.
+-- The shadow repo — undo.
 --
 -- Separate `--git-dir`, shared `--work-tree`. The plugin never needs to know how
 -- the user manages their dotfiles: bare config with no repo, config that *is*

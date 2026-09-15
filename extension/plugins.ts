@@ -1,4 +1,4 @@
-// Queries against the plugin index (§12).
+// Queries against the plugin index.
 //
 // Separated from `nvim.ts` for the same reason `gate.ts` is: the interesting
 // logic is a pure function of the database, and a pure function can be tested

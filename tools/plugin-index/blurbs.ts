@@ -1,4 +1,4 @@
-// The blurb pipeline (§12).
+// The blurb pipeline.
 //
 // A plugin needs one sentence saying what it is for, and the words a person
 // would search for it by. awesome-neovim supplies both by hand for the plugins

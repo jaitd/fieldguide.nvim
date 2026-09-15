@@ -1,4 +1,4 @@
-// Builds the plugin index (§12): one SQLite file describing the Neovim plugin
+// Builds the plugin index: one SQLite file describing the Neovim plugin
 // ecosystem, so the agent can answer about plugins that are *not* installed.
 //
 // The installed set is already covered, and better: nvim_docs resolves helptags

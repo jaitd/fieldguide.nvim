@@ -1,4 +1,4 @@
--- Dispatch table, launch flags and reload planning (§8). No live config needed.
+-- Dispatch table, launch flags and reload planning. No live config needed.
 --
 --   nvim -l tests/unit.lua
 
@@ -29,7 +29,7 @@ do
   local r = api.call("definitely_not_a_verb", {})
   check("unknown verb is refused", r.ok == false and r.error:find("unknown verb") ~= nil, vim.inspect(r))
 
-  -- The door the design cares about: the verb arrives as data, so there is no
+  -- The injection path that matters: the verb arrives as data, so there is no
   -- path from agent input to arbitrary Lua through it.
   local injected = api.call("os.exit(1) --", {})
   check("a verb name that is Lua source is just a missing key", injected.ok == false, vim.inspect(injected))
