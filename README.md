@@ -8,9 +8,8 @@ joined against the live session those files produced. Ask it why a keymap does
 what it does, what a plugin's option means, or to make a change and check that
 your config still boots.
 
-A general coding agent can grep your config. It cannot enumerate your installed
-plugins and read only those docs, at only those versions. That join is the
-point.
+Unlike a general coding agent grepping your config, it knows which plugins you
+have installed and reads their docs at the versions you are running.
 
 It does not interrupt you, review your diffs, or help with code outside your
 Neovim config. [sidekick.nvim](https://github.com/folke/sidekick.nvim) and
@@ -51,7 +50,7 @@ back.
 
 The agent never reads what is in your buffers. `state` reports names, paths,
 and diagnostics messages, not lines. A path gate in the extension enforces the
-two readable zones, with a test table covering the ways around it.
+readable zones, and the test suite covers known ways around it.
 
 ## Requirements
 
@@ -116,9 +115,9 @@ past sessions to pick up where you left off.
 execution. `verify` is not that gate: it boots and quits, so anything deferred
 to an autocmd, a keymap, or a plugin `config` function never runs under it.
 
-The realistic risk is prompt injection through the docs the agent reads, not
-the agent deciding to misbehave: it reads tens of thousands of lines of
-third-party help text with nobody watching.
+The main risk is prompt injection: the agent reads a large amount of
+third-party help text unattended, and text in those docs could steer what it
+writes.
 
 The default is `"auto"`. If you would rather keep a hand on it, start at
 `"verify-only"` and switch to `:FieldguideLevel auto` when you are watching:
@@ -127,7 +126,7 @@ The default is `"auto"`. If you would rather keep a hand on it, start at
 opts = { reload = { level = "verify-only" } }
 ```
 
-More on what does and does not hold in [docs/design-notes.md](docs/design-notes.md).
+More on what `verify` does and does not catch in [docs/design-notes.md](docs/design-notes.md).
 
 ## Keys inside the panel
 
@@ -169,7 +168,7 @@ Override with `panel_keys = { hide = "...", history = "..." }`.
 | `:FieldguideState [sections]` | dump live state |
 | `:FieldguideIndex` | download or refresh the plugin index |
 | `:FieldguideRpc` | the raw event stream, for protocol work |
-| `:FieldguideTerm` | an embedded-terminal sidebar, kept as a fallback |
+| `:FieldguideTerm` | run pi in an embedded-terminal sidebar instead of the panel |
 
 ## The plugin index (optional)
 
@@ -198,12 +197,11 @@ b3nj5m1n/kommentary           528★  superseded by numToStr/Comment.nvim
 numToStr/Comment.nvim        4666★  active, last commit 24 months ago
 ```
 
-Age is reported and never judged: Comment.nvim has not needed a commit in two
-years and is still the right answer. Only what a maintainer declared counts.
+A plugin is only marked withdrawn when its maintainer has archived it or named
+a successor. Time since the last commit is shown but never counts against it:
+Comment.nvim above is still maintained.
 
-A background refresh is available and off by default, because a plugin that
-reaches for the network at startup uninvited has made a decision that was not
-its to make:
+A background refresh is available, off by default:
 
 ```lua
 index = {
@@ -215,8 +213,8 @@ index = {
 An update never disturbs a session in progress: the download is verified, then
 swapped in, and a running session keeps the index it started with. The index
 and the plugin are versioned independently, and a mismatch names which side to
-update. How the index is built, and what stops a repository describing itself
-into it, is in [tools/plugin-index/README.md](tools/plugin-index/README.md).
+update. How the index is built, and how its generated descriptions are
+checked, is in [tools/plugin-index/README.md](tools/plugin-index/README.md).
 
 ## Configuration
 
@@ -277,8 +275,8 @@ A model id from the wrong provider is not caught up front. pi passes it through
 and the refusal arrives mid-reply, which the panel shows as `agent error:`.
 
 API keys come from the environment only, for example `OPENROUTER_API_KEY`.
-There is no key field in the config, because Neovim configs get committed to
-public repos.
+There is no key field in the config, so a key never ends up in a config you
+commit.
 
 ### Markdown rendering
 
@@ -303,9 +301,8 @@ All linked with `default`, so a colourscheme can claim them.
 ## How it works, briefly
 
 - **Three zones.** The agent can read and write your config directory, read
-  the installed plugins' docs, and nothing else. The path gate is enforced in
-  the extension, with a test table that is the security-relevant part of the
-  suite.
+  the installed plugins' docs and `$VIMRUNTIME`, and nothing else. The path
+  gate is enforced in the extension and has its own test suite.
 - **verify** boots your config headless inside an OS sandbox: config read-only,
   no network, all writes thrown away. It reports errors, `:messages`, which
   plugins loaded, and how long it took. It is a correctness check, not a
@@ -314,10 +311,10 @@ All linked with `default`, so a colourscheme can claim them.
   shares its work tree. Every agent write is a commit there. Your real repo,
   if you have one, never sees it.
 - **The CLI.** Every tool is also `bin/fieldguide <verb>`, which talks to the
-  running editor over its socket. The agent harness is an adapter on top.
+  running editor over its socket. The agent calls the same verbs.
 
-The reasoning behind these choices, the differences between the two sandboxes,
-and the panel's layout behaviour are in [docs/design-notes.md](docs/design-notes.md).
+What `verify` does not catch, how the two sandboxes differ, and how the panel
+behaves are in [docs/design-notes.md](docs/design-notes.md).
 
 ## Development
 
@@ -350,9 +347,8 @@ its own release track and is never committed here. Everything else at the top
 level ships to a user's machine when a plugin manager checks the repo out.
 
 Without mise: `node --test tests/*.test.ts`, then `nvim -l tests/<name>.lua`
-for each file in `tests/`, and `./tests/bridge.sh`. The bridge tests run
-against *your* real config on purpose: the docs resolver's whole claim is that
-it answers from what is actually installed.
+for each file in `tests/`, and `./tests/bridge.sh`. The bridge tests read
+*your* real Neovim config and installed plugins.
 
 ### Conventions
 

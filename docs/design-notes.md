@@ -1,24 +1,23 @@
 # Design notes
 
-The reasoning behind fieldguide's choices, moved out of the README so that
-the README can be read in one sitting. Section numbers (§) refer to the
-original design document, which is not part of this repository.
+Details that do not fit in the README: what `verify` does and does not
+guarantee, how the two sandboxes differ, and how the panel behaves.
 
-## Why `verify` is not a security control
+## What `verify` does not catch
 
-`verify` is not the gate. It boots and quits, so autocmd callbacks, keymap RHS,
-`on_attach`, `defer_fn` and plugin `config` functions never run — a payload in
-any of those returns "boot ok". There is a fixture in
-[`tests/fixtures/deferred-payload/`](../tests/fixtures/deferred-payload/) and a test
-asserting that `verify` reports it clean, kept as a regression test on the
-*documentation* so nobody later mistakes `verify` for a security control.
+`verify` boots your config and quits. Anything deferred past startup never runs
+under it: autocmd callbacks, keymap right-hand sides, `on_attach`, `defer_fn`
+and plugin `config` functions. A payload in any of those still returns "boot
+ok". [`tests/fixtures/deferred-payload/`](../tests/fixtures/deferred-payload/)
+is such a config, and the suite asserts that `verify` reports it clean.
 
-The real threat is not the agent turning evil. It is prompt injection through the
-doc zone: the agent autonomously reads tens of thousands of lines of third-party
-help text, and there is no human between that read and `reload`.
+`verify` is a correctness check, not a security control. The risk to plan for
+is prompt injection through the plugin docs the agent reads: it reads a large
+amount of third-party help text unattended, and nothing stands between that
+reading and `reload`.
 
-What does hold: the three-zone path gate, the closed verb table, a sandbox on
-`verify`, and the shadow repo. See §6 of the design for the full table.
+What does hold is the path gate on the three zones, the fixed set of tools, the
+sandbox around `verify`, and the shadow repo.
 
 ## The two sandboxes
 
@@ -27,8 +26,7 @@ What does hold: the three-zone path gate, the closed verb table, a sandbox on
 ships with macOS) on macOS. Pin one with `verify = { sandbox = "bwrap" }` or
 `"seatbelt"`; there is no `"none"`.
 
-They are not the same sandbox, and the difference is worth knowing before you
-read a clean `verify` as more than it is:
+They are built differently:
 
 | | bwrap | seatbelt |
 |---|---|---|
@@ -39,117 +37,83 @@ read a clean `verify` as more than it is:
 | network | `--unshare-net` | `(deny network*)`, unix sockets kept |
 | processes | `--unshare-pid`, `--new-session` | no equivalent |
 
-The three properties `verify` leans on hold under both: the config tree cannot
-be written, the boot cannot reach the network, and everything it writes lands
-somewhere that is thrown away. Process isolation is the one that does not
-survive the crossing — on macOS the booted config shares a PID namespace and a
-session with your editor. `verify` was never a security control (§6); on macOS
-it is a little less of one.
+Under both, the config tree cannot be written, the boot cannot reach the
+network, and everything it writes is thrown away. Process isolation is Linux
+only: on macOS the booted config shares a PID namespace and a session with your
+editor.
 
-A stow-style config — `~/.config/nvim` a real directory full of links into a
-dotfiles repo — is read through those links deliberately: the directories they
-point at are added to the sandbox's read list, one level of indirection at a
-time, and `$HOME` itself is never added back.
+A stow-style config, where `~/.config/nvim` is a real directory full of links
+into a dotfiles repo, is read through those links: the directories they point
+at are added to the sandbox's read list one level of indirection at a time, and
+`$HOME` itself is never added back.
 
-## Why there is no `package.json`
+## No `package.json`
 
-There is **no `npm install`**. The extension's only runtime import is `typebox`,
-which pi resolves from its own installation — a `package.json` here would mean a
-`node_modules/` inside a directory a plugin manager also `git checkout`s (§5.2).
+There is no `npm install`. The extension's only runtime import is `typebox`,
+which pi resolves from its own installation, so the plugin directory never
+contains a `node_modules/`.
 
-## Keeping the panel at the edge
+## The panel stays at the edge
 
-The sidebar holds its edge. Vim has no notion of an edge window, so a `:vsplit`
-with the cursor in the transcript splits *the transcript* — the prompt ends up
-stranded in the middle of the screen and the editor sharing a column with the
-panel. Rather than forbid the split, the panel checks its own layout whenever a
-window opens or closes and rebuilds itself at the edge when it has been
-displaced. The split still happens; it lands in the editor area, which is where
-you meant it. A horizontal split made from inside the panel comes back as a
-vertical one, because by the time the panel is out of the way there is no row
-left to stack it in.
+A split made with the cursor in the panel lands in the editor area instead, and
+the panel rebuilds itself at the edge. A horizontal split made from inside the
+panel opens as a vertical one.
 
-`winfixwidth` keeps the panel its own width the rest of the time, but it is also
-what makes `<C-w>|` unrecoverable: maximising a window squeezes every other one
-down to `winminwidth` regardless, and the equalise you would reach for next
-skips fixed-width windows — leaving the panel one column wide with nothing able
-to widen it. So the panel takes its width back itself. A width you *chose*, by
-dragging or `<C-w><`, is remembered and restored instead of the configured one.
+The panel keeps its width. If `<C-w>|` or a similar command squeezes it, it
+restores its width afterwards. A width you set yourself, by dragging or with
+`<C-w><`, is remembered and restored instead of the configured one.
 
 ## Past sessions
 
 `<C-o>` in either half of the panel, or `:FieldguideHistory` from anywhere,
-lists what you have asked before, newest first, titled by the question you opened
-with. `keys = { history = "<leader>fh" }` binds it globally, alongside `toggle`,
-`focus` and `reload`; `panel_keys = { history = … }` moves it inside the panel. Picking one
-replays it and hands the agent back its *context*, not a transcript of it — pi
-persists every session and takes `--session <id>`, so the next thing you ask
-lands in the conversation you are looking at rather than beside it.
+lists what you have asked before, newest first, titled by your opening
+question. `keys = { history = "<leader>fh" }` binds it globally, alongside
+`toggle`, `focus` and `reload`; `panel_keys = { history = … }` moves it inside
+the panel.
 
-Sessions live in `stdpath("state")/fieldguide/sessions`, ours rather than pi's
-own default, so a field guide session stays out of the history of whatever else
-you use pi for and that history stays out of this picker. Set
+Picking a session replays it and resumes the agent's context, so the next
+question continues that conversation.
+
+Sessions are stored in `stdpath("state")/fieldguide/sessions`, separately from
+pi's own sessions, so neither shows up in the other's history. Set
 `chat = { session_dir = … }` to move them.
 
-The replay goes through the same renderer as the live stream, so a tool call
-read back off disk folds, jumps and paints exactly as the original did — it is
-the same code path. The log stores whole messages where the stream delivers
-deltas, and that difference stops inside `chat/history.lua`.
+A replayed session renders exactly as it did live: tool calls fold, jump and
+highlight the same way.
 
 ## Reading the transcript
 
-The transcript is a page you read, not a file you edit, so `j` and `k` advance
-through an *answer* rather than through a line: while there is more of the one
-you are on below the fold they scroll it, and once its end is on screen the same
-key lands on the top of the next. An answer taller than the window is the case a
-plain jump-to-next-message would skip straight past. Nothing is taken away —
-the arrow keys, `gj`/`gk` and `<C-e>`/`<C-y>` are ordinary motion, for when you
-want to yank one line out of a code block.
+`j` and `k` move through the transcript by answer. While more of the current
+answer is below the window they scroll it; once its end is visible, the same
+key moves to the start of the next one. The arrow keys, `gj`/`gk` and
+`<C-e>`/`<C-y>` keep their usual line-by-line behaviour.
 
-The page moves only when it has to. Landing on a reply that is already whole on
-screen moves the cursor and leaves the text alone; only a turn that runs off the
-bottom is brought up to the top. `scrolloff` is set to `0` inside the panel to
-make that hold — it is enforced at redraw and overrides a topline set from Lua,
-so with a normal `scrolloff` a reply you could already see still slid a couple of
-lines every time you pressed `j`.
+The view only scrolls when it has to. Moving to an answer that is already fully
+visible moves the cursor without scrolling; an answer that runs off the bottom
+is brought to the top. `scrolloff` is `0` inside the panel.
 
-The message you are on is bracketed by a bar down the sign column — a bar rather
-than a tint across the message, because a turn can be a hundred lines and
-colouring all of them makes the thing you are reading the loudest thing on the
-screen instead of the clearest. The column is permanently reserved, not `auto`,
-so the transcript cannot jump sideways when the bar appears; that costs two
-columns of the panel's width, and `chat = { mark_current = false }` buys them
-back. The bar is `FieldguideCurrent`.
+The answer under the cursor is marked with a bar in the sign column,
+highlighted with `FieldguideCurrent`. The sign column is always reserved, so
+text does not shift when the bar moves; `chat = { mark_current = false }`
+removes the bar and gives back those two columns.
 
 `<F5>` puts the Ex command under the cursor on the command line, and stops
-there. You read it and press Enter. It is marked with a `▶` so you can see which
-lines have one: either a line in a ```` ```vim ```` fence, or a code span that
-starts with a colon, which is what a model writes most of the time — `` `:Telescope
-live_grep` `` is unambiguous where a bare `` `<Space><Space>` `` is a key, a path or
-a plugin name.
+there: you read it and press Enter. Lines with a command are marked `▶`. A
+command is either a line in a ```` ```vim ```` fence or a code span that starts
+with a colon, such as `` `:Telescope live_grep` ``.
 
-**It loads the command, it does not run it.** The agent reads tens of thousands
-of lines of third-party help text on its own and with nobody watching, and a key
-that executed whatever came back would leave nothing between that and this
-editor — a bigger surface than `reload`, which at least only re-requires your
-own config modules. What is worth automating is the retyping, not the deciding.
-Control bytes are stripped when the command is read, because a carriage return
-anywhere in the text would end the command line for us, and that is the one way
-this key could execute something after all.
+**`<F5>` never runs the command.** Transcript text can come from third-party
+docs the agent has read. Control characters are stripped when the command is
+loaded, so a carriage return in the text cannot submit it.
 
-## Rendering tool calls
+## Tool calls in the transcript
 
-Tool calls are not markdown, and are indented four spaces so that the parser
-agrees: consecutive tool lines are otherwise a single paragraph, and the `~` in
-one path pairs with the `~` in the next to strike through everything between
-them. Four spaces makes the run an indented code block, which has no inline
-parsing at all and which render-markdown leaves alone.
+Tool calls are indented four spaces, so markdown renderers such as
+render-markdown treat them as code and leave paths intact.
 
-They open with a glyph — `▪` ran, `✓` passed, `✗` failed — and are dimmed to the
-colour of a comment, which leaves the agent's own answer as the only thing on the
-page in the foreground colour. A markdown list marker would have put them in the
-same visual bucket as the bullet lists the agent writes itself. Five groups, all
-linked with `default` so a colourscheme can claim them:
+Each opens with a glyph — `▪` ran, `✓` passed, `✗` failed — and is dimmed to
+the comment colour, so the agent's answer stands out. Five highlight groups,
+all linked with `default` so a colourscheme can override them:
 
 | | |
 |---|---|
@@ -158,29 +122,23 @@ linked with `default` so a colourscheme can claim them:
 | `FieldguideToolIcon` | the leading glyph |
 | `FieldguideToolOk` / `FieldguideToolError` | the glyph when a call passed or failed |
 
-Your own turns are attributed by name, taken from the passwd entry — `whoami`
-without a subprocess — and painted with `FieldguideUser`. Set
-`chat = { user_name = "…" }` to be called something else.
+Your own turns are labelled with your login name, highlighted with
+`FieldguideUser`. Set `chat = { user_name = "…" }` to use a different name.
 
-An `edit` collapses pi's own diff behind it, counted in the summary as `+2 −1`,
-with added and removed lines in `FieldguideDiffAdd` / `FieldguideDiffDelete` —
-`Added` and `Removed`, not `DiffAdd`, which is a background fill meant for a diff
-window. `gf` on that line opens the file at the first change.
+An `edit` collapses its diff behind a summary line counted as `+2 −1`, with
+added and removed lines in `FieldguideDiffAdd` and `FieldguideDiffDelete`
+(linked to `Added` and `Removed`). `gf` on that line opens the file at the
+first change.
 
-The transcript's winbar names the panel and the model answering, and is the only
-place the name appears; the row above the prompt is blank unless the agent is
-doing something, and carries a spinner and how long it has been doing it when it
-is — "thinking" and "thinking, still, ninety seconds in" are different situations
-and the word alone cannot tell them apart. That row is there even when it is
-blank: a winbar set to the empty string is not drawn at all, so a status that
-came and went took a row of the prompt with it every time. An empty
-prompt shows what it is for and names the two bindings that are not guessable.
-These use `FieldguideTitle`, `FieldguideSession` and `FieldguidePlaceholder`.
+The transcript's winbar shows the panel's name and the model answering. The row
+above the prompt is empty until the agent is working, then shows a spinner and
+how long it has been working. An empty prompt shows placeholder text naming its
+two main bindings. These use `FieldguideTitle`, `FieldguideSession` and
+`FieldguidePlaceholder`.
 
-## Why the CLI exists
+## The CLI
 
-The verbs are also a plain CLI, which is the seam that makes the harness an
-adapter rather than the architecture (§5.4):
+Every tool is also a command, run against a Neovim listening on a socket:
 
 ```
 FIELDGUIDE_ADDR=/run/nvim.sock nvim -l bin/fieldguide docs --query=fugitive --fetch
@@ -188,40 +146,25 @@ FIELDGUIDE_ADDR=/run/nvim.sock nvim -l bin/fieldguide docs --query=fugitive --fe
 
 ## Testing the other sandbox
 
-`verify` has two sandbox backends and a machine has one kernel, so half of it is
-unreachable from wherever you are sitting. `mise run test:linux` builds the
-image in [`docker/`](../docker/) — Neovim from the release tarball, bubblewrap,
-mise, and a small real config with plugins at real revisions for the bridge
-tests to answer from — mounts the repo read-only, and runs the same task list
-against bwrap. Docker Desktop or OrbStack is enough; there is no separate VM to
-keep.
+`verify` has a sandbox per OS, so a single machine can only exercise one of
+them. `mise run test:linux` builds the image in
+[`tests/docker/`](../tests/docker/) — Neovim from the release tarball,
+bubblewrap, mise, and a small config with plugins at pinned revisions for the
+bridge tests — mounts the repo read-only, and runs the same task list against
+bwrap. Docker Desktop or OrbStack is enough.
 
 ```
-mise run test:linux                        # the whole task list
+mise run test:linux                         # the whole task list
 mise run test:linux -- mise run test:verify # one task
 mise run test:linux -- bash                 # a shell in there
 ```
 
-The container needs `seccomp=unconfined`, `SYS_ADMIN` and `NET_ADMIN` for bwrap
-to build the sandbox it builds outside one — less than `--privileged`, and
-enough that what runs under test is the sandbox that ships rather than a
-weakened stand-in. `docker/run.sh` says which flag buys what.
+The container runs with `seccomp=unconfined`, `SYS_ADMIN` and `NET_ADMIN`, which
+bwrap needs to build its sandbox inside a container; this is less than
+`--privileged`, and the sandbox under test is the one that ships.
+`tests/docker/run.sh` documents each flag.
 
 `pi` is not installed in the image, so `test:extension` skips itself there and
-says so. A Mac that has slept comes back with the VM's clock behind the host's,
-which surfaces as apt refusing every Debian release file as "not valid yet"
-during a rebuild; `run.sh` measures the skew and names it, because nothing else
-about that error suggests a clock.
-
-## Build order
-
-Steps 1–4 are useful with no agent at all, and step 4 is the part nothing else
-does. See §9 of the design.
-
-- [x] 1. `api.lua` with `state`, plus `bin/fieldguide`
-- [x] 2. `verify`: the sandbox profiles, the structured payload, the escape alarm
-- [x] 3. the three-zone path gate and its test table
-- [x] 4. `docs` resolver, `explain_keymap` composed on top
-- [x] 5. pi extension: verbs as tools, `tool_result` hook, `--tools` allowlist
-- [x] 6. shadow repo, `reload`, levels, `:FieldguideReload` / `:FieldguideUndo`
-- [x] 7. sidebar
+says so. If a rebuild fails with apt reporting Debian release files as "not
+valid yet", the VM's clock is behind the host's, which happens after a Mac
+sleeps; `run.sh` detects the skew and reports it.

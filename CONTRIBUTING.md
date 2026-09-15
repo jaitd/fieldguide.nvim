@@ -7,8 +7,8 @@ the time of the people reviewing your change; in return, they will be prompt,
 specific, and help you get it merged.
 
 The [README](README.md) says what fieldguide is. The
-[design notes](docs/design-notes.md) say why it is that way, and are worth
-reading before any change bigger than a bug fix.
+[design notes](docs/design-notes.md) cover how its guards and panel behave, and
+are worth reading before any change bigger than a bug fix.
 
 ## What we are looking for
 
@@ -31,8 +31,8 @@ And what we are not:
   nobody watching. A change that widens what it can read, write or execute
   needs an argument, not just a use case. Make that argument in a discussion
   first.
-- **Dependencies.** There is no `package.json` and no build step, and
-  [that is deliberate](docs/design-notes.md#why-there-is-no-packagejson).
+- **Dependencies.** There is no `package.json` and no build step; see
+  [No `package.json`](docs/design-notes.md#no-packagejson).
 
 ## Talk to us before you open a pull request
 
