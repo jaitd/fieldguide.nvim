@@ -1,0 +1,224 @@
+# Rebuilds the plugin index (§12) and publishes it as a release asset.
+#
+# Weekly, because what changes here is the shape of the ecosystem — plugins
+# appearing, repositories being archived, maintainers naming a successor — and
+# that moves on the scale of months. A daily rebuild would spend API quota and
+# model credits to publish a file nobody could tell from yesterday's.
+#
+# The expensive half is the blurbs, and it only runs for plugins that are new
+# or whose release moved since the last pass. That state lives in
+# tools/plugin-index/blurbs.json, committed back by this job, so a normal week
+# costs a few dozen model calls rather than a few thousand.
+
+name: plugin index
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      no_llm:
+        description: "Skip blurb generation; rebuild from the committed cache only"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Two runs would race on the cache commit and the release tag. Never cancel a
+# run in flight — it may already have spent model credits on blurbs that are
+# only saved at the end.
+concurrency:
+  group: plugin-index
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # PNPM_HOME is set here rather than left to the action: without a global
+      # bin directory `pnpm add -g` fails outright, and there is no package.json
+      # in this repo for the action to read a store location from. GITHUB_PATH
+      # only reaches later steps, but pnpm refuses a global install unless the
+      # bin directory is on PATH already, so this step exports it for itself.
+      - name: Install pi
+        run: |
+          export PNPM_HOME="$HOME/.local/share/pnpm"
+          export PATH="$PNPM_HOME:$PATH"
+          mkdir -p "$PNPM_HOME"
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+          echo "PNPM_HOME=$PNPM_HOME" >> "$GITHUB_ENV"
+          pnpm add -g @earendil-works/pi-coding-agent
+          "$PNPM_HOME/pi" --version
+
+      # The catalog pi ships with lags OpenRouter's, and a model it does not
+      # know it runs as a bare custom id with no reasoning support — so
+      # `--thinking off` is dropped and the model reasons at its own default.
+      # The refresh only fetches for providers with a key, hence the env.
+      - name: Refresh pi's model catalog
+        if: ${{ !inputs.no_llm }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: pi update --models
+
+      - name: Build
+        env:
+          # The job's own token: 5,000 GraphQL points an hour, which is well
+          # clear of one pass over the corpus.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          FIELDGUIDE_INDEX_PROVIDER: openrouter
+          FIELDGUIDE_INDEX_MODEL: ${{ vars.INDEX_MODEL || 'deepseek/deepseek-v4.1-flash' }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::warning::OPENROUTER_API_KEY is unset — building from the committed cache only"
+            node tools/plugin-index/build.ts nvim-plugins.db --no-llm
+          elif [ "${{ inputs.no_llm }}" = "true" ]; then
+            node tools/plugin-index/build.ts nvim-plugins.db --no-llm
+          else
+            node tools/plugin-index/build.ts nvim-plugins.db
+          fi
+
+      # The blurbs are the only thing this job pays for, and until the commit
+      # below lands they exist only on this runner. Kept for a month whatever
+      # happens next — a failed gate, a rejected push, a cancel — so a lost run
+      # costs a download rather than another pass over the model.
+      - name: Keep the blurbs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blurbs-${{ github.run_id }}
+          path: tools/plugin-index/blurbs.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Check it is worth publishing
+        run: |
+          # A crawl that half-failed still writes a perfectly valid file.
+          # Publishing it would quietly replace a good index with a worse one,
+          # and the failure would surface weeks later as the agent not knowing
+          # about plugins it knew about before. Cheaper to fail here.
+          node tools/plugin-index/summary.ts nvim-plugins.db | tee summary.json
+          node -e '
+            const s = require("./summary.json");
+            if (s.plugins < 1500) {
+              console.error(`::error::only ${s.plugins} plugins indexed, expected >=1500`);
+              process.exit(1);
+            }
+            if (s.described < s.plugins * 0.8) {
+              console.error(`::error::only ${s.described}/${s.plugins} have a blurb`);
+              process.exit(1);
+            }
+          '
+
+      - name: Commit the blurb cache
+        # Runs even when the gate above fails: the build writes the cache as
+        # soon as the blurbs are done, and a rejected index is no reason to
+        # pay for them again next week.
+        if: ${{ !cancelled() }}
+        run: |
+          # The cache is the expensive state and the audit trail: a blurb that
+          # a poisoned repository talked the model into writing shows up here as
+          # a diff before it ever reaches a user.
+          if git diff --quiet -- tools/plugin-index/blurbs.json; then
+            echo "no new blurbs this run"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Counted in plugins, not diff lines: the file is pretty-printed, so
+          # one blurb is a dozen lines, and "new" and "rewritten" say different
+          # things about the week — the ecosystem grew, or plugins released.
+          subject=$(node -e '
+            const { execFileSync } = require("node:child_process");
+            const path = "tools/plugin-index/blurbs.json";
+            const before = JSON.parse(execFileSync("git", ["show", `HEAD:${path}`], { encoding: "utf8" }));
+            const after = JSON.parse(require("node:fs").readFileSync(path, "utf8"));
+            let added = 0, updated = 0;
+            for (const [name, blurb] of Object.entries(after)) {
+              if (!(name in before)) added++;
+              else if (JSON.stringify(before[name]) !== JSON.stringify(blurb)) updated++;
+            }
+            const plural = (n) => `${n} plugin${n === 1 ? "" : "s"}`;
+            process.stdout.write(`chore(index): describe ${plural(added + updated)} (${added} new, ${updated} updated)`);
+          ')
+          git add tools/plugin-index/blurbs.json
+          git commit -m "$subject"
+          # The build takes the best part of an hour, and main moving under it
+          # is ordinary — a merge, or this job's own commit from a run that
+          # finished first. Only this job writes blurbs.json, so replaying the
+          # commit onto the new tip does not conflict; try a few times in case
+          # main moves again between the fetch and the push.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not push the blurb cache; it is attached to this run as blurbs-${{ github.run_id }}"
+          exit 1
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # One release per schema major, with the asset replaced in place.
+          #
+          # A reader knows the major it was built against and nothing about
+          # which minor it will be offered months from now, so it cannot build
+          # an exact-version URL. A channel tag it can:
+          #
+          #   releases/download/index-v1/nvim-plugins.db.gz
+          #
+          # The precise version lives in the file's meta and in the release
+          # title. Rolling to a new major means creating index-v2 and keeping
+          # index-v1 fed until it is retired, so nobody's editor loses the tools
+          # the day the schema moves.
+          schema=$(node -e '
+            const { DatabaseSync } = require("node:sqlite");
+            const db = new DatabaseSync("nvim-plugins.db", { readOnly: true });
+            process.stdout.write(db.prepare("select value from meta where key=?").get("schema").value);
+          ')
+          tag="index-v${schema%%.*}"
+          echo "schema $schema -> $tag"
+
+          # Compare against what is already published. A build that differs only
+          # in star counts is not worth 18MB of everyone's bandwidth, and
+          # republishing it would move built_at without moving what the index
+          # can answer.
+          if gh release download "$tag" --pattern nvim-plugins.db.gz --output published.db.gz 2>/dev/null; then
+            gunzip -f published.db.gz
+            node tools/plugin-index/changed.ts published.db nvim-plugins.db | tee changed.json
+            if [ "$(node -p 'require("./changed.json").material')" != "true" ]; then
+              echo "::notice::no material change since the published index — keeping it"
+              exit 0
+            fi
+          else
+            echo "nothing published for $tag yet"
+          fi
+
+          gzip -9 -k nvim-plugins.db
+          # Published beside the file and fetched before it. Same host, so this
+          # catches a truncated transfer, not a hostile GitHub — and because it
+          # is a few bytes against a few megabytes, it also answers "is there
+          # anything new" for free.
+          sha256sum nvim-plugins.db.gz | awk '{print $1}' > nvim-plugins.db.gz.sha256
+          node tools/plugin-index/summary.ts nvim-plugins.db --notes > notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" nvim-plugins.db.gz nvim-plugins.db.gz.sha256 --clobber
+            gh release edit "$tag" --title "Plugin index $schema" --notes-file notes.md --latest
+          else
+            gh release create "$tag" nvim-plugins.db.gz nvim-plugins.db.gz.sha256 \
+              --title "Plugin index $schema" \
+              --notes-file notes.md \
+              --latest
+          fi

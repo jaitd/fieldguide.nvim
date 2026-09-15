@@ -1,0 +1,2 @@
+# Deliberately unparseable: the verify sandbox has to boot a broken config.
+tests/fixtures/syntax-error/

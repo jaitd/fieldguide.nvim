@@ -1,0 +1,5 @@
+# The tree is written in two-space Lua, and stylua defaults to tabs — without
+# this file a formatting run rewrites every source file in the repo.
+column_width = 120
+indent_type = "Spaces"
+indent_width = 2

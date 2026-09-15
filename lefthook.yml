@@ -1,0 +1,72 @@
+# Git hooks. Installed by `mise run hooks`; lefthook itself comes from
+# mise.toml, so there is nothing to install by hand and nothing global.
+#
+# The suite is two seconds end to end, which is the only reason pre-push can
+# afford to run all of it. Keep it that way and the hooks stay worth having.
+
+pre-commit:
+  parallel: true
+  commands:
+    stylua:
+      glob: "*.lua"
+      # Through mise: a hook's PATH is not a login shell's, and stylua lives
+      # where mise put it rather than anywhere global. --respect-ignores
+      # because stylua skips .styluaignore for files named on the command
+      # line, and the deliberately unparseable fixture is one of them.
+      run: mise exec -- stylua --check --respect-ignores {staged_files}
+    gate:
+      # The security-relevant suite (§9), and the one worth failing a commit
+      # over rather than discovering later.
+      glob: "{extension/*.ts,tests/gate.test.ts}"
+      run: mise exec -- node --test tests/gate.test.ts
+
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        set -eu
+        subject=$(head -1 "{1}")
+        # Let git's own machinery through: merges, reverts, fixups, and the
+        # comment-only buffer of an aborted commit.
+        case "$subject" in
+          "Merge "*|"Revert "*|"fixup!"*|"squash!"*|"#"*|"") exit 0 ;;
+        esac
+        pattern='^(feat|fix|chore|docs|refactor|perf|test|build|ci)(\([a-z0-9./_-]+\))?!?: .+'
+        if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+          echo "commit message is not a conventional commit:" >&2
+          echo "  $subject" >&2
+          echo >&2
+          echo "  <type>(<optional scope>): <subject>" >&2
+          echo "  types: feat fix chore docs refactor perf test build ci" >&2
+          echo "  e.g.  feat(verify): boot the config under seatbelt on macOS" >&2
+          exit 1
+        fi
+        if [ "${#subject}" -gt 72 ]; then
+          echo "subject is ${#subject} characters; keep it under 72" >&2
+          exit 1
+        fi
+
+# lefthook skips a pre-push command when the push carries no file changes, and
+# neither `force` nor `skip_empty` overrides that per command. So a push of
+# nothing but empty commits reaches the remote unchecked — the one case not
+# worth engineering around, and better written down than quietly assumed.
+pre-push:
+  parallel: false
+  commands:
+    branch-name:
+      run: |
+        set -eu
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        case "$branch" in
+          main|HEAD) exit 0 ;;
+        esac
+        if ! printf '%s' "$branch" | grep -Eq '^(feat|fix|chore|docs|refactor|perf|test|build|ci)/[a-z0-9._-]+$'; then
+          echo "branch name does not follow the convention:" >&2
+          echo "  $branch" >&2
+          echo >&2
+          echo "  <type>/<short-kebab-description>" >&2
+          echo "  e.g.  feat/seatbelt-sandbox" >&2
+          exit 1
+        fi
+    test:
+      run: mise run test

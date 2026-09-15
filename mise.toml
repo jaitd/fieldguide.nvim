@@ -1,0 +1,140 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+
+# Neovim and node are deliberately NOT pinned here.
+#
+# v1 drives the `pi` and the `nvim` already on PATH (§5.2), and verify boots the
+# *user's* editor — pinning either would mean testing a Neovim the user does not
+# run. Minimums are asserted at launch instead, with a readable failure:
+#
+#   nvim   0.12+     (jobstart({term=true}), vim.loader.find, vim.system)
+#   node   22+       (native TypeScript type stripping, for the tests)
+#   pi     0.79+     (tool_result hook, extension tool registry)
+#   bwrap  0.10+     (verify's sandbox on Linux; refuses to run unsandboxed)
+#   sandbox-exec     (verify's sandbox on macOS; ships with the OS)
+#   git    2.x       (shadow repo)
+[tools]
+stylua = "latest"
+lefthook = "latest"
+
+[tasks.test]
+description = "Everything, roughly in the order §8 ranks it by how much it matters"
+depends = [
+  "test:gate",
+  "test:extension",
+  "test:plugins",
+  "test:unit",
+  "test:framing",
+  "test:rpc",
+  "test:sink",
+  "test:tools",
+  "test:reading",
+  "test:history",
+  "test:chat",
+  "test:verify",
+  "test:shadow",
+  "test:bridge",
+]
+
+# The path gate goes first: it is the security-relevant suite, and §9 puts it
+# before any write tool is enabled, not after.
+[tasks."test:gate"]
+description = "Three-zone path gate — the table from §8"
+run = "node --test tests/gate.test.ts"
+
+[tasks."test:extension"]
+description = "pi extension loads, registers the verbs, wires the hooks"
+run = "node --test tests/extension.test.ts"
+
+[tasks."test:plugins"]
+description = "Plugin index — ranking, liveness, edges, and the blurb guards"
+run = "node --test tests/plugins.test.ts tests/blurbs.test.ts tests/changed.test.ts tests/index-fetch.test.ts tests/github.test.ts"
+
+[tasks."test:unit"]
+description = "Dispatch table, launch flags, path helpers, reload planning"
+run = "nvim -l tests/unit.lua"
+
+[tasks."test:framing"]
+description = "JSONL framing — chunk boundaries, CRLF, U+2028 inside strings"
+run = "nvim -l tests/framing.lua"
+
+[tasks."test:rpc"]
+description = "Protocol adapter against a scripted agent: loss, order, awkward cases"
+run = "nvim -l tests/rpc.lua"
+
+[tasks."test:sink"]
+description = "Buffer appender — partial lines, autoscroll, large payloads"
+run = "nvim -l tests/sink.lua"
+
+[tasks."test:tools"]
+description = "Tool renderers — the verbs get one line, not their JSON"
+run = "nvim -l tests/tools.lua"
+
+[tasks."test:chat"]
+description = "The buffer-rendered panel, driven from a scripted agent"
+run = "nvim -l tests/chat.lua"
+
+[tasks."test:history"]
+description = "Past sessions: listing them, and reading one back"
+run = "nvim -l tests/history.lua"
+
+[tasks."test:reading"]
+description = "Moving through the transcript, and the commands in it"
+run = "nvim -l tests/reading.lua"
+
+[tasks."test:verify"]
+description = "verify fixtures, including the §6 payload regression test"
+run = "nvim -l tests/verify.lua"
+
+[tasks."test:shadow"]
+description = "Shadow repo across the three topologies from §4"
+run = "nvim -l tests/shadow.lua"
+
+[tasks."test:bridge"]
+description = "Verbs over RPC against a live headless instance"
+run = "./tests/bridge.sh"
+
+# The suite again, on Linux, where `verify` takes the bwrap path that a macOS
+# host cannot exercise. Not part of `test`: it builds an image and wants a
+# running Docker.
+[tasks."test:linux"]
+description = "The whole task list in a Linux container — the bwrap half of verify"
+run = "./tests/docker/run.sh"
+
+[tasks.hooks]
+description = "Install the git hooks (stylua, the gate suite, conventional commits)"
+run = "lefthook install"
+
+# The index is released on its own track, so fetching one and building one are
+# different jobs with different costs. Most people want the first.
+[tasks."index:fetch"]
+description = "Download the latest published plugin index into the state dir"
+run = """
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/nvim/fieldguide"
+repo="${FIELDGUIDE_INDEX_REPO:-jaitd/fieldguide.nvim}"
+mkdir -p "$dir"
+# The same fetcher :FieldguideIndex runs: it asks for the schema major this
+# checkout reads, checks the digest, opens the file before trusting it, and
+# swaps it in without disturbing a session that has the old one open.
+node extension/index-fetch.ts "$dir/nvim-plugins.db" --repo "$repo"
+node tools/plugin-index/summary.ts "$dir/nvim-plugins.db"
+"""
+
+[tasks.index]
+description = "Build the plugin index from scratch (slow; needs a GitHub token and an LLM provider)"
+run = """
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/nvim/fieldguide"
+mkdir -p "$dir"
+node tools/plugin-index/build.ts "$dir/nvim-plugins.db" {{arg(name="args", var=true, default="")}}
+"""
+
+[tasks.fmt]
+description = "Format Lua"
+run = "stylua lua bin tests"
+
+[tasks."fmt:check"]
+description = "Check Lua formatting without writing"
+run = "stylua --check lua bin tests"
+
+[tasks.doctor]
+description = "Report whether this machine can run fieldguide, and what is missing"
+run = "./tests/doctor.sh"

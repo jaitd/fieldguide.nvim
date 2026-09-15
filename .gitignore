@@ -1,0 +1,10 @@
+*.log
+.luarc.json
+doc/tags
+node_modules/
+mise.local.toml
+.mise.local.toml
+
+# Built indexes. The artifact is released, never committed.
+nvim-plugins.db
+nvim-plugins.db.gz
