@@ -33,8 +33,20 @@ local function write(path, text)
   vim.uv.fs_close(fd)
 end
 
+-- The fixture repos are built with plain git, and a suite run from a git hook
+-- inherits GIT_DIR pointing at the repository being committed or pushed. `-C`
+-- does not override it: `git -C <fixture> init` reinitialises *that* repository
+-- and the fixture's commits land in it. So the fixtures get the same stripped
+-- environment shadow.lua gives its own git calls.
+local git_env = vim.fn.environ()
+for _, key in ipairs({ "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY" }) do
+  git_env[key] = nil
+end
+
 local function git(dir, args)
-  return vim.system(vim.list_extend({ "git", "-C", dir }, args), { text = true }):wait(10000)
+  return vim
+    .system(vim.list_extend({ "git", "-C", dir }, args), { text = true, env = git_env, clear_env = true })
+    :wait(10000)
 end
 
 ---Point fieldguide at a fresh config dir and clean up its shadow afterwards.
@@ -235,6 +247,43 @@ end, function(dir)
   check("lock: a held lock fails rather than hanging", c.ok == false, vim.inspect(c))
   check("lock: gives up in bounded time", elapsed < 5000, ("%.0fms"):format(elapsed))
   check("lock: the error names the lock", (c.error or ""):find("index%.lock") ~= nil, tostring(c.error))
+end)
+
+-- Neovim opened from inside git — as the commit message editor, or from a hook —
+-- inherits GIT_DIR and GIT_WORK_TREE for the user's own repository. A shadow
+-- that honoured them would checkpoint into that repository instead of its own.
+io.write("inherited git environment\n")
+topology("inherited-env", function(dir)
+  write(dir .. "/init.lua", "-- v1\n")
+  local decoy = dir .. "/decoy"
+  vim.fn.mkdir(decoy, "p")
+  git(decoy, { "init", "--quiet" })
+  git(decoy, { "config", "user.email", "t@t" })
+  git(decoy, { "config", "user.name", "t" })
+  git(decoy, { "commit", "--quiet", "--allow-empty", "-m", "the user's repo" })
+end, function(dir)
+  local decoy = dir .. "/decoy"
+  vim.env.GIT_DIR = decoy .. "/.git"
+  vim.env.GIT_WORK_TREE = decoy
+  -- A fresh copy of the module: shadow.lua reads the environment once, on its
+  -- first git call, and the topologies above have already made that call. A
+  -- real session inherits these variables before it, so load one that has not.
+  package.loaded["fieldguide.shadow"] = nil
+  local fresh = require("fieldguide.shadow")
+  local ok, c = pcall(function()
+    fresh.ensure()
+    write(dir .. "/init.lua", "-- v2\n")
+    return fresh.checkpoint("agent write")
+  end)
+  package.loaded["fieldguide.shadow"] = shadow
+  vim.env.GIT_DIR = nil
+  vim.env.GIT_WORK_TREE = nil
+
+  check("inherited-env: checkpoint commits", ok and c.ok and c.sha ~= nil, vim.inspect(c))
+  local count = git(decoy, { "rev-list", "--count", "HEAD" }).stdout
+  check("inherited-env: the inherited repository's history is untouched", vim.trim(count) == "1", count)
+  local bare = git(decoy, { "config", "core.bare" }).stdout
+  check("inherited-env: the inherited repository is not made bare", vim.trim(bare) == "false", bare)
 end)
 
 vim.fn.delete(scratch, "rf")
