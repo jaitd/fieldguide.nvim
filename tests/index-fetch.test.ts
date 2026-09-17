@@ -1,4 +1,4 @@
-// Replacing the index under a running session (§12).
+// Replacing the index under a running session.
 //
 // The extension holds the index open for the life of a session, so the whole
 // question here is whether an update can hurt someone mid-conversation. These

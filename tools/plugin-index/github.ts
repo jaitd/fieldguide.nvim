@@ -1,4 +1,4 @@
-// Everything the index knows before a model sees it (§12).
+// Everything the index knows before a model sees it.
 //
 // Two sources, deliberately unequal. awesome-neovim is a curated list with a
 // category taxonomy and a human-written line per plugin, and a human line is
@@ -6,7 +6,7 @@
 // is the long tail: wider, unlabelled, and the reason the blurb pipeline exists.
 //
 // No dependencies: `fetch` is built in, which is what keeps this repo free of a
-// package.json (§5.2).
+// package.json.
 
 import { execFileSync } from "node:child_process";
 

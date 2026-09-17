@@ -1,4 +1,5 @@
--- Shadow repo (§8): the three topologies from §4, lock contention, and undo.
+-- Shadow repo: the three ways a config dir can sit in git, lock contention,
+-- undo, and an inherited git environment.
 --
 --   nvim -l tests/shadow.lua
 --
@@ -112,8 +113,7 @@ end, function(dir)
   check("own repo: the real repo sees ordinary uncommitted changes", status:find("init.lua") ~= nil, status)
 end)
 
--- 3. The config dir nested inside a much larger dotfiles repo — the common case
---    §4 says cannot be assumed away.
+-- 3. The config dir nested inside a much larger dotfiles repo, a common layout.
 topology("nested", function(dir)
   local config = dir .. "/nvim/.config/nvim"
   write(config .. "/init.lua", "-- v1\n")

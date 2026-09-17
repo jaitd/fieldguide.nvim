@@ -1,5 +1,5 @@
 // Does a fresh build differ from the published one in a way anyone would
-// notice? (§12)
+// notice?
 //
 //   node tools/plugin-index/changed.ts <published.db> <fresh.db>
 //

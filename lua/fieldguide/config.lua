@@ -1,6 +1,6 @@
 -- Resolved paths and user options.
 --
--- Everything downstream compares *resolved* paths (§5.5): `stdpath("config")`
+-- Everything downstream compares *resolved* paths: `stdpath("config")`
 -- is routinely a symlink into a dotfile-manager tree, and a prefix test on the
 -- unresolved path fails open.
 
@@ -23,7 +23,7 @@ M.defaults = {
   cmd = "pi",
   cwd = nil, -- default: resolve(stdpath("config"))
   window = { side = "right", width = 80 },
-  -- Subtractive only (§7): the set can shrink from config, never grow.
+  -- Subtractive only: the set can shrink from config, never grow.
   verbs = { "state", "docs", "explain_keymap", "verify", "reload" },
   state = { default = { "nvim", "buffers", "diagnostics", "plugins", "keymaps" } },
   -- "auto" picks by OS: bwrap on Linux, seatbelt (`sandbox-exec`) on macOS.
@@ -57,7 +57,7 @@ M.defaults = {
     max_tool_lines = 40,
   },
   reload = { level = "auto" }, -- auto | verify-only | manual
-  -- The plugin index (§12): one SQLite file describing the ecosystem, so the
+  -- The plugin index: one SQLite file describing the ecosystem, so the
   -- agent can answer about plugins that are *not* installed. Absent is fine —
   -- the two tools it backs are simply not offered. nil resolves to
   -- <state_dir>/nvim-plugins.db; `:FieldguideIndex` fetches one.
@@ -98,7 +98,7 @@ function M.paths()
   end
 
   -- The unresolved path matters too: it is where nvim expects to find the
-  -- config, so it is the *destination* the verify sandbox binds onto (§5.9).
+  -- config, so it is the *destination* the verify sandbox binds onto.
   local declared = M.options.cwd or vim.fn.stdpath("config")
   local config_dir = real(declared)
 

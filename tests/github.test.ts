@@ -1,4 +1,4 @@
-// The crawl's GitHub client (§12).
+// The crawl's GitHub client.
 //
 // An unattended weekly run meets GitHub at its worst: queries it gives up on,
 // connections it closes halfway through a response. None of that may cost the

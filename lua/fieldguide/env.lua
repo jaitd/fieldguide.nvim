@@ -37,7 +37,7 @@ function M.agent()
   return {
     FIELDGUIDE_PLUGIN_INDEX = M.plugin_index(),
     -- Handed over explicitly rather than through $NVIM, so a future loosening
-    -- of the tool list cannot silently re-expose the socket (§6).
+    -- of the tool list cannot silently re-expose the socket.
     FIELDGUIDE_ADDR = vim.v.servername,
     NVIM = "",
     FIELDGUIDE_BIN = M.plugin_root() .. "/bin/fieldguide",

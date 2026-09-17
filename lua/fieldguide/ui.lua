@@ -1,9 +1,8 @@
--- The sidebar (§5.1). Thinnest layer in the design, and the one that disappears
--- entirely if the harness is ever replaced by one that renders into a Neovim
--- buffer.
+-- The embedded-terminal sidebar behind :FieldguideTerm: pi running in a
+-- terminal buffer, as an alternative to the chat panel.
 --
--- Owned rather than delegated: a dependency here would drag in the
--- general-purpose agent framework this plugin explicitly is not.
+-- Owned rather than delegated: a dependency here would drag in a
+-- general-purpose agent framework.
 
 local api = require("fieldguide.api")
 local cfg = require("fieldguide.config")
@@ -22,10 +21,7 @@ local plugin_root = env.plugin_root
 local function check_harness()
   local cmd = cfg.options.cmd
   if vim.fn.executable(cmd) == 0 then
-    return false,
-      ("%q is not on PATH. v1 drives the pi you already have:\n  npm install -g @earendil-works/pi-coding-agent"):format(
-        cmd
-      )
+    return false, ("%q is not on PATH. Install pi with:\n  npm install -g @earendil-works/pi-coding-agent"):format(cmd)
   end
   local res = vim.system({ cmd, "--version" }, { text = true }):wait(5000)
   -- First line only: some tools print a banner, and the whole thing ends up in

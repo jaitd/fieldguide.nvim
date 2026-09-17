@@ -1,4 +1,4 @@
-// The plugin index (§12): ranking, withdrawal, and the queries the tools run.
+// The plugin index: ranking, withdrawal, and the queries the tools run.
 //
 // Every case builds its own miniature index in memory rather than leaning on a
 // downloaded one. The real file is 18MB of GitHub metadata that changes weekly;

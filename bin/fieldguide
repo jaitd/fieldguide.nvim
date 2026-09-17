@@ -1,5 +1,5 @@
 #!/usr/bin/env -S nvim -l
--- The client (§5.4). One `nvim -l` script; dumb transport.
+-- The client. One `nvim -l` script; dumb transport.
 --
 --   fieldguide state --what=buffers,diagnostics
 --   fieldguide docs --query=fugitive --fetch
@@ -72,7 +72,7 @@ if not verb then
 end
 
 -- Handed to us explicitly by the sidebar so that a future loosening of the tool
--- list cannot silently re-expose the socket through $NVIM (§6).
+-- list cannot silently re-expose the socket through $NVIM.
 local addr = os.getenv("FIELDGUIDE_ADDR")
 if not addr or addr == "" then
   addr = os.getenv("NVIM")

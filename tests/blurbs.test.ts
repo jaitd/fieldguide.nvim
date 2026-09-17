@@ -1,4 +1,4 @@
-// The blurb pipeline's guards (§12).
+// The blurb pipeline's guards.
 //
 // Nothing here talks to a model or to GitHub. The parts worth testing are the
 // ones that decide what a model is allowed to have said: validation, the
