@@ -10,10 +10,14 @@ Discussion / issue:
 
 ## How it was tested
 
-<!-- Which suites you ran, on which OS and sandbox, and whether you tried it in a real Neovim. -->
+<!--
+CI runs `mise run test` on Linux, under bwrap, on node 22 and the LTS. Say what it
+cannot see: whether you ran the suite on macOS (seatbelt), and whether you tried
+the change in a real Neovim.
+-->
 
-- [ ] `mise run test` passes
 - [ ] A behaviour change comes with a test that fails without it
+- [ ] If this touches `extension/`: `mise run test:extension` ran with pi installed, rather than skipping (CI has no pi)
 
 ## AI assistance
 

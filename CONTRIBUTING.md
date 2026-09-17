@@ -61,8 +61,8 @@ spent a weekend on.
 - Every change is tested. A behaviour change comes with a test that fails
   without it.
 - Every change works on both sandboxes. `verify` runs under `bwrap` on Linux
-  and `sandbox-exec` on macOS; if you can only run one, say so in the PR and
-  run `mise run test:linux` for the other half if you have Docker.
+  and `sandbox-exec` on macOS. CI runs the suite on Linux for every pull
+  request; if you could not run it on macOS, say so in the PR.
 - The *why* goes in the code. Comments here explain the reason a line is the
   way it is, not what it does. Match that.
 - You understand what you submit, however it was written. See
