@@ -19,6 +19,7 @@ import { renameSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import * as gh from "./github.ts";
 import { loadCache, saveCache, describe, modelFromEnv, type Cache } from "./blurbs.ts";
+import { isConfig } from "./shape.ts";
 
 const CACHE = new URL("./blurbs.json", import.meta.url).pathname;
 
@@ -140,10 +141,23 @@ async function main() {
 
   // A curated plugin stays in whatever its stars; the sweep's floor is the only
   // thing keeping the long tail from being mostly abandoned experiments.
-  const keep = [...repos.values()].filter(
+  const floored = [...repos.values()].filter(
     (r) => !r.isFork && (curatedBy.has(r.nameWithOwner.toLowerCase()) || r.stargazerCount >= gh.STAR_FLOOR),
   );
-  say(`  ${keep.length} after filtering forks and the floor\n`);
+  say(`  ${floored.length} after filtering forks and the floor\n`);
+
+  // Dotfiles and personal configs, dropped before the blurbs. Curated repos
+  // are exempt: the distributions are configs on purpose.
+  const keep = floored.filter(
+    (r) =>
+      curatedBy.has(r.nameWithOwner.toLowerCase()) ||
+      !isConfig({
+        nameWithOwner: r.nameWithOwner,
+        top: r.tree?.entries?.map((e) => e.name) ?? null,
+        hasLua: (r.luaTree?.entries?.length ?? 0) > 0,
+      }),
+  );
+  say(`  ${keep.length} after dropping ${floored.length - keep.length} configs and dotfiles\n`);
 
   // --- blurbs ---------------------------------------------------------------
   const cache: Cache = loadCache(CACHE);

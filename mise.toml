@@ -49,7 +49,7 @@ run = "node --test tests/extension.test.ts"
 
 [tasks."test:plugins"]
 description = "Plugin index — ranking, liveness, edges, and the blurb guards"
-run = "node --test tests/plugins.test.ts tests/blurbs.test.ts tests/changed.test.ts tests/index-fetch.test.ts tests/github.test.ts"
+run = "node --test tests/plugins.test.ts tests/blurbs.test.ts tests/changed.test.ts tests/index-fetch.test.ts tests/github.test.ts tests/shape.test.ts"
 
 [tasks."test:unit"]
 description = "Dispatch table, launch flags, path helpers, reload planning"

@@ -106,6 +106,20 @@ Each blurb is cached in `blurbs.json` against the release tag it describes, or
 the commit when there is no tag. CI commits that file back, so a weekly rebuild
 only asks the model about plugins that are new or have moved.
 
+## What is dropped
+
+The topic sweep returns a lot of dotfiles: someone's config with an `init.lua`
+at the root, or a whole `$HOME` of zsh and tmux with an `nvim/` directory
+inside. `shape.ts` drops those before the blurbs, by the shape of the tree
+rather than the name — an `init.lua` at the root, a lockfile, or a spread of
+other tools' directories with no runtimepath directory beside them. A name
+that only ever means a config (`dotfiles`, `nix-config`) needs no tree.
+
+Curated repositories are exempt, which is what keeps kickstart, LazyVim and
+AstroNvim: they have an `init.lua` at the root like any config, and
+awesome-neovim lists them on purpose. The one distribution that is neither
+curated nor shaped like a plugin is named in `shape.ts` directly.
+
 ## Guards
 
 The material fed to the model is untrusted text, and its output ends up in a
