@@ -37,13 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
@@ -96,7 +96,7 @@ jobs:
       # costs a download rather than another pass over the model.
       - name: Keep the blurbs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: blurbs-${{ github.run_id }}
           path: tools/plugin-index/blurbs.json
