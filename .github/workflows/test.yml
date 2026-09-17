@@ -1,0 +1,40 @@
+# Runs the whole suite on every pull request, and on main after a merge.
+#
+# Through tests/docker/run.sh, the same entry point as `mise run test:linux`:
+# the image has the Neovim, bwrap and installed plugin config the suite needs,
+# so CI runs what a contributor runs rather than a second setup that can drift.
+# The macOS half of verify (seatbelt) is not covered here.
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to a PR makes the run for the previous one moot.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    name: linux (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest node the README promises, and the LTS CI builds with.
+        node: ["22", ".node-version"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: mise run test
+        run: |
+          node="${{ matrix.node }}"
+          if [ "$node" = .node-version ]; then node=$(cat .node-version); fi
+          FIELDGUIDE_NODE_VERSION="$node" ./tests/docker/run.sh

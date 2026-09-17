@@ -5,6 +5,9 @@
 #   mise run test:linux -- mise run test:verify
 #   mise run test:linux -- bash         # a shell in there
 #
+# FIELDGUIDE_NODE_VERSION picks the node the image is built on; unset, it is the
+# Dockerfile's default, the oldest node fieldguide supports.
+#
 # The repo is mounted read-only: the container is for running the tests, not
 # for editing the tree, and a read-only mount is also how root in here stops
 # leaving root-owned files in your checkout.
@@ -32,7 +35,11 @@ if [[ "$skew" -gt 1800 || "$skew" -lt -1800 ]]; then
   echo "      release file is \"not valid yet\", restart Docker/OrbStack to resync." >&2
 fi
 
-docker build --quiet -t "$IMAGE" -f "$ROOT/tests/docker/Dockerfile" "$ROOT" >/dev/null
+build=(docker build --quiet -t "$IMAGE" -f "$ROOT/tests/docker/Dockerfile")
+if [[ -n "${FIELDGUIDE_NODE_VERSION:-}" ]]; then
+  build+=(--build-arg "NODE_VERSION=$FIELDGUIDE_NODE_VERSION")
+fi
+"${build[@]}" "$ROOT" >/dev/null
 
 # bwrap has to build the same sandbox in here that it builds on a real Linux
 # box, and a container denies it three things by default:

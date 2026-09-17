@@ -6,7 +6,10 @@
 #
 # Nothing here is a deployment target. It is a place to run `mise run test`.
 
-FROM node:22-bookworm-slim
+# 22 is the oldest node fieldguide supports. CI also builds this with the LTS
+# from .node-version, through FIELDGUIDE_NODE_VERSION in run.sh.
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-bookworm-slim
 
 # bubblewrap is the point of the image. python3 is what tests/bridge.sh asserts
 # its JSON with; git is the shadow repo; xz-utils and curl unpack Neovim.
