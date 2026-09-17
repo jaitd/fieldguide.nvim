@@ -177,18 +177,18 @@ jobs:
           # which minor it will be offered months from now, so it cannot build
           # an exact-version URL. A channel tag it can:
           #
-          #   releases/download/index-v1/nvim-plugins.db.gz
+          #   releases/download/fg-plugin-index-v1/nvim-plugins.db.gz
           #
           # The precise version lives in the file's meta and in the release
-          # title. Rolling to a new major means creating index-v2 and keeping
-          # index-v1 fed until it is retired, so nobody's editor loses the tools
+          # title. Rolling to a new major means creating fg-plugin-index-v2 and keeping
+          # fg-plugin-index-v1 fed until it is retired, so nobody's editor loses the tools
           # the day the schema moves.
           schema=$(node -e '
             const { DatabaseSync } = require("node:sqlite");
             const db = new DatabaseSync("nvim-plugins.db", { readOnly: true });
             process.stdout.write(db.prepare("select value from meta where key=?").get("schema").value);
           ')
-          tag="index-v${schema%%.*}"
+          tag="fg-plugin-index-v${schema%%.*}"
           echo "schema $schema -> $tag"
 
           # Compare against what is already published. A build that differs only
@@ -215,10 +215,10 @@ jobs:
           node tools/plugin-index/summary.ts nvim-plugins.db --notes > notes.md
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" nvim-plugins.db.gz nvim-plugins.db.gz.sha256 --clobber
-            gh release edit "$tag" --title "Plugin index $schema" --notes-file notes.md --latest
+            gh release edit "$tag" --title "fieldguide-plugin-index-v$schema" --notes-file notes.md --latest
           else
             gh release create "$tag" nvim-plugins.db.gz nvim-plugins.db.gz.sha256 \
-              --title "Plugin index $schema" \
+              --title "fieldguide-plugin-index-v$schema" \
               --notes-file notes.md \
               --latest
           fi

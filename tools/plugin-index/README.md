@@ -53,8 +53,8 @@ the two halves. Change one and the tests will tell you about the other.
 One release per schema major, with the asset replaced in place:
 
 ```
-index-v1/nvim-plugins.db.gz
-index-v1/nvim-plugins.db.gz.sha256
+fg-plugin-index-v1/nvim-plugins.db.gz
+fg-plugin-index-v1/nvim-plugins.db.gz.sha256
 ```
 
 The digest is served by the same host as the file, so it detects a truncated or
@@ -66,8 +66,8 @@ Tags carry the schema major, not a date, so a reader can always find the newest
 index it can read. The precise schema version is in the file's `meta` and the
 release title, and `built_at` records when the data was collected.
 
-A new schema major gets a new tag, `index-v2`, and `index-v1` keeps being
-published until it is retired, so existing installs keep working.
+A new schema major gets a new tag, `fg-plugin-index-v2`, and `fg-plugin-index-v1`
+keeps being published until it is retired, so existing installs keep working.
 
 The weekly job replaces the asset **only when something material changed**:
 the plugin set, a withdrawal flag, a blurb, a category, or keywords. Star

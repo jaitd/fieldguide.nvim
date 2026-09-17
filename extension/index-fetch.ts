@@ -39,7 +39,7 @@ const DEFAULT_REPO = "jaitd/fieldguide.nvim";
  */
 export function assetUrl(repo: string, name: string, reads = READS_SCHEMA, base = GITHUB): string {
   const major = reads.split(".")[0];
-  return `${base}/${repo}/releases/download/index-v${major}/${name}`;
+  return `${base}/${repo}/releases/download/fg-plugin-index-v${major}/${name}`;
 }
 
 const GITHUB = "https://github.com";
