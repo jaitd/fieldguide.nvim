@@ -17,7 +17,6 @@ whether you tried the change in a real Neovim.
 -->
 
 - [ ] A behaviour change comes with a test that fails without it
-- [ ] If this touches `extension/`: `mise run test:extension` ran with pi installed, rather than skipping (CI has no pi)
 
 ## AI assistance
 

@@ -117,8 +117,10 @@ test("pi extension", async (t) => {
   });
 
   if (!loaded) {
-    t.skip(SKIP.skip);
     await rm(root, { recursive: true, force: true });
+    // The test image installs pi, so a skip there means the install broke.
+    if (process.env.FIELDGUIDE_TEST_REQUIRE_PI) assert.fail(SKIP.skip);
+    t.skip(SKIP.skip);
     return;
   }
   const { tools, handlers } = loaded;

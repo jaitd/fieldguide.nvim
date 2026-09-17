@@ -38,6 +38,16 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh \
   && mise --version
 ENV MISE_TRUSTED_CONFIG_PATHS=/work
 
+# pi, so test:extension runs rather than skips. Through pnpm, not npm: the test
+# finds pi's typebox and jiti through the NODE_PATH that pnpm's launcher script
+# exports, and npm's plain symlink has none.
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN npm install -g pnpm@10 \
+  && pnpm add -g @earendil-works/pi-coding-agent \
+  && pi --version
+ENV FIELDGUIDE_TEST_REQUIRE_PI=1
+
 # Tools from mise.toml (stylua) at build time, so the run needs no network.
 WORKDIR /work
 COPY mise.toml /work/mise.toml
