@@ -11,9 +11,9 @@ Discussion / issue:
 ## How it was tested
 
 <!--
-CI runs `mise run test` on Linux, under bwrap, on the node in .node-version. Say
-what it cannot see: whether you ran the suite on macOS (seatbelt), and whether you tried
-the change in a real Neovim.
+CI runs `mise run test` on Linux, under bwrap, on the node in .node-version.
+Say what it cannot see: whether you ran the suite on macOS (seatbelt), and
+whether you tried the change in a real Neovim.
 -->
 
 - [ ] A behaviour change comes with a test that fails without it
