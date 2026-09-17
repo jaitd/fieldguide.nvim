@@ -61,8 +61,8 @@ spent a weekend on.
 - Every change is tested. A behaviour change comes with a test that fails
   without it.
 - Every change works on both sandboxes. `verify` runs under `bwrap` on Linux
-  and `sandbox-exec` on macOS; if you can only run one, say so in the PR and
-  run `mise run test:linux` for the other half if you have Docker.
+  and `sandbox-exec` on macOS. CI runs the suite on Linux for every pull
+  request; if you could not run it on macOS, mention it in the PR.
 - The *why* goes in the code. Comments here explain the reason a line is the
   way it is, not what it does. Match that.
 - You understand what you submit, however it was written. See
@@ -70,7 +70,7 @@ spent a weekend on.
 
 ## Getting set up
 
-You need Neovim 0.12+, node 22+, git, a sandbox (`bwrap` on Linux,
+You need Neovim 0.12+, node 24+, git, a sandbox (`bwrap` on Linux,
 `sandbox-exec` on macOS) and [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
 0.79+ with a model provider. [mise](https://mise.jdx.dev) is optional but makes
 everything below one command. From a clone of your fork:
@@ -115,7 +115,7 @@ how to run the tests without mise.
 - **Small enough to review.** If a change cannot be read in one sitting, split
   it. The discussion is the place to agree how.
 - **Stick to what was agreed.** If the approach had to change along the way,
-  say so in the PR rather than leaving a reviewer to discover it.
+  mention it in the PR rather than leaving a reviewer to discover it.
 - **Say how you tested it**: which suites, which OS, whether you tried it in a
   real Neovim.
 - **Declare AI assistance** in the template section for it.

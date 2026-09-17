@@ -57,7 +57,7 @@ readable zones, and the test suite covers known ways around it.
 | | |
 |---|---|
 | Neovim | 0.12 or newer |
-| node | 22 or newer |
+| node | 24 or newer |
 | git | for the shadow repo |
 | a sandbox | `bwrap` on Linux, `sandbox-exec` on macOS (ships with the OS) |
 | pi | 0.79 or newer, with a model provider configured |

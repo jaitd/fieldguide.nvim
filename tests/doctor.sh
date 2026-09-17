@@ -20,7 +20,7 @@ row() { # label, found, note
 printf '\nfieldguide requirements\n'
 
 row nvim  "$(nvim --version 2>/dev/null | head -1)" "not on PATH — 0.12+ required"
-row node  "$(node --version 2>/dev/null)"           "not on PATH — 22+ required by the pi extension"
+row node  "$(node --version 2>/dev/null)"           "not on PATH — 24+ required by the pi extension"
 row git   "$(git --version 2>/dev/null)"            "not on PATH — the shadow repo needs it"
 # The sandbox verify boots in, which is not the same program on every OS.
 if [[ "$(uname -s)" == "Darwin" ]]; then
