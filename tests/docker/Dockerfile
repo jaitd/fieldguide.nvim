@@ -6,8 +6,7 @@
 #
 # Nothing here is a deployment target. It is a place to run `mise run test`.
 
-# The node in .node-version, passed in by run.sh. No default here, so the
-# version is written down in one place.
+# No default: run.sh passes .node-version, the one place the version is set.
 ARG NODE_VERSION
 FROM node:${NODE_VERSION}-bookworm-slim
 
