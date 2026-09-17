@@ -255,10 +255,10 @@ test("a young index is not even asked about", async () => {
 test("a build asks for its own schema major, never for whatever is newest", () => {
   assert.equal(
     assetUrl("o/r", "nvim-plugins.db.gz", "1.4.2"),
-    "https://github.com/o/r/releases/download/index-v1/nvim-plugins.db.gz",
+    "https://github.com/o/r/releases/download/fg-plugin-index-v1/nvim-plugins.db.gz",
   );
   assert.equal(
     assetUrl("o/r", "nvim-plugins.db.gz", "2.0.0"),
-    "https://github.com/o/r/releases/download/index-v2/nvim-plugins.db.gz",
+    "https://github.com/o/r/releases/download/fg-plugin-index-v2/nvim-plugins.db.gz",
   );
 });
