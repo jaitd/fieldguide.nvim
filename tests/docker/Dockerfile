@@ -6,9 +6,9 @@
 #
 # Nothing here is a deployment target. It is a place to run `mise run test`.
 
-# 22 is the oldest node fieldguide supports. CI also builds this with the LTS
-# from .node-version, through FIELDGUIDE_NODE_VERSION in run.sh.
-ARG NODE_VERSION=22
+# The node in .node-version, passed in by run.sh. No default here, so the
+# version is written down in one place.
+ARG NODE_VERSION
 FROM node:${NODE_VERSION}-bookworm-slim
 
 # bubblewrap is the point of the image. python3 is what tests/bridge.sh asserts

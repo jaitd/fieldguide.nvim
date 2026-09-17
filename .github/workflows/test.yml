@@ -22,19 +22,10 @@ concurrency:
 
 jobs:
   linux:
-    name: linux (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # The oldest node the README promises, and the LTS CI builds with.
-        node: ["22", ".node-version"]
     steps:
       - uses: actions/checkout@v7
 
       - name: mise run test
-        run: |
-          node="${{ matrix.node }}"
-          if [ "$node" = .node-version ]; then node=$(cat .node-version); fi
-          FIELDGUIDE_NODE_VERSION="$node" ./tests/docker/run.sh
+        run: ./tests/docker/run.sh

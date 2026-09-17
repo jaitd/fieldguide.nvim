@@ -7,15 +7,16 @@
 # run. Minimums are asserted at launch instead, with a readable failure:
 #
 #   nvim   0.12+     (jobstart({term=true}), vim.loader.find, vim.system)
-#   node   22+       (native TypeScript type stripping, for the tests)
+#   node   24+       (the LTS, named in .node-version)
 #   pi     0.79+     (tool_result hook, extension tool registry)
 #   bwrap  0.10+     (verify's sandbox on Linux; refuses to run unsandboxed)
 #   sandbox-exec     (verify's sandbox on macOS; ships with the OS)
 #   git    2.x       (shadow repo)
 #
-# .node-version names the LTS that CI builds the index with. It is what nvm, fnm
-# and setup-node read; mise leaves it alone unless idiomatic version files are
-# switched on for node, so the node on PATH stays the user's.
+# .node-version names that minimum, which CI builds the index and runs the tests
+# on. It is what nvm, fnm and setup-node read; mise leaves it alone unless
+# idiomatic version files are switched on for node, so the node on PATH stays
+# the user's.
 [tools]
 stylua = "latest"
 lefthook = "latest"

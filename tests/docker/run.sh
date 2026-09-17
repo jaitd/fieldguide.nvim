@@ -5,9 +5,6 @@
 #   mise run test:linux -- mise run test:verify
 #   mise run test:linux -- bash         # a shell in there
 #
-# FIELDGUIDE_NODE_VERSION picks the node the image is built on; unset, it is the
-# Dockerfile's default, the oldest node fieldguide supports.
-#
 # The repo is mounted read-only: the container is for running the tests, not
 # for editing the tree, and a read-only mount is also how root in here stops
 # leaving root-owned files in your checkout.
@@ -15,6 +12,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAGE="${FIELDGUIDE_LINUX_IMAGE:-fieldguide-linux-test}"
+NODE_VERSION="$(cat "$ROOT/.node-version")"
 
 if ! docker info >/dev/null 2>&1; then
   echo "docker is not running — start Docker Desktop or OrbStack first" >&2
@@ -25,7 +23,7 @@ fi
 # the first symptom is apt refusing every Debian release file as "not valid
 # yet" — which reads like a broken mirror rather than a wrong clock. Say so.
 skew=$(( $(date -u +%s) - $(docker run --rm "$IMAGE" date -u +%s 2>/dev/null || \
-           docker run --rm node:22-bookworm-slim date -u +%s 2>/dev/null || echo 0) ))
+           docker run --rm "node:$NODE_VERSION-bookworm-slim" date -u +%s 2>/dev/null || echo 0) ))
 # Minutes of drift are normal and cost nothing; hours are what breaks the apt
 # step of a build. A warning either way — a stale clock is never a reason to
 # refuse to run tests that are already built.
@@ -35,11 +33,8 @@ if [[ "$skew" -gt 1800 || "$skew" -lt -1800 ]]; then
   echo "      release file is \"not valid yet\", restart Docker/OrbStack to resync." >&2
 fi
 
-build=(docker build --quiet -t "$IMAGE" -f "$ROOT/tests/docker/Dockerfile")
-if [[ -n "${FIELDGUIDE_NODE_VERSION:-}" ]]; then
-  build+=(--build-arg "NODE_VERSION=$FIELDGUIDE_NODE_VERSION")
-fi
-"${build[@]}" "$ROOT" >/dev/null
+docker build --quiet -t "$IMAGE" -f "$ROOT/tests/docker/Dockerfile" \
+  --build-arg "NODE_VERSION=$NODE_VERSION" "$ROOT" >/dev/null
 
 # bwrap has to build the same sandbox in here that it builds on a real Linux
 # box, and a container denies it three things by default:
