@@ -37,10 +37,11 @@ require("lazy").setup({
     dir = repo,
     lazy = false,
     opts = {
-      -- Left to pi's own settings: whoever records this uses the provider they
-      -- are logged in to, and no key belongs in a committed file.
-      provider = vim.env.FIELDGUIDE_DEMO_PROVIDER,
-      model = vim.env.FIELDGUIDE_DEMO_MODEL,
+      -- The pair the recordings are made with, overridable for a take on
+      -- another provider. Credentials are pi's business either way: they come
+      -- from the environment or `pi auth`, never from a committed file.
+      provider = vim.env.FIELDGUIDE_DEMO_PROVIDER or "openai-codex",
+      model = vim.env.FIELDGUIDE_DEMO_MODEL or "gpt-5.6-luna",
       window = { side = "right", width = 72 },
       -- The recording edits nothing, and a prompt mid-take would stall it.
       reload = { level = "manual" },
