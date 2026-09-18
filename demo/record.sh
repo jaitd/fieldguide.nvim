@@ -47,9 +47,11 @@ rm -rf "$XDG_CONFIG_HOME/nvim"
 cp -R "$HERE/config" "$XDG_CONFIG_HOME/nvim"
 
 # Plugins first, off camera: a take that opens on lazy.nvim cloning
-# repositories is a take about lazy.nvim.
+# repositories is a take about lazy.nvim. `restore` rather than `install`, so
+# every take runs the revisions in demo/config/lazy-lock.json: a plugin that
+# released between two takes must not change what the answers say.
 echo "installing the demo config's plugins..."
-nvim --headless "+Lazy! install" +qa
+nvim --headless "+Lazy! restore" +qa
 
 # The index the third question is answered from. It is released separately from
 # the plugin, so a fresh profile has none until it is fetched.

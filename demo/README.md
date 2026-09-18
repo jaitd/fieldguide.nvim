@@ -14,6 +14,7 @@ instead of re-enacted. `record.sh` starts Neovim under `asciinema` and plays
 |---|---|
 | `script.txt` | what the recording does: `send <keys>`, `wait <seconds>` |
 | `config/` | the Neovim config the recording answers from |
+| `config/lazy-lock.json` | its plugins, pinned, so takes stay comparable |
 | `record.sh` | the recorder |
 | `.profile/` | the throwaway Neovim profile (gitignored) |
 
