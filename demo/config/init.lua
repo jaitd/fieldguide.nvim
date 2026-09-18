@@ -65,8 +65,9 @@ require("lazy").setup({
       window = { side = "right", width = 72 },
       -- Whoever records this is not the point, and $USER would be on screen.
       chat = { user_name = "you" },
-      -- The recording edits nothing, and a prompt mid-take would stall it.
-      reload = { level = "manual" },
+      -- Edits apply without asking, reload still prompts: the take ends on an
+      -- edit, and a confirmation mid-take would stall the script.
+      reload = { level = "verify-only" },
       keys = { toggle = "<leader>fg" },
     },
   },
@@ -75,6 +76,9 @@ require("lazy").setup({
   change_detection = { enabled = false },
   install = { colorscheme = { "habamax" } },
 })
+
+-- Demo furniture: the keys being pressed, shown bottom left. Not fieldguide.
+require("keycast").setup()
 
 vim.o.number = true
 vim.o.laststatus = 0

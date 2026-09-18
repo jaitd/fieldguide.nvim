@@ -25,7 +25,10 @@ REPO="$(cd "$HERE/.." && pwd)"
 # — the file a keymap came from, the config it read — and those go on screen.
 # From here they read /tmp/fieldguide-demo/..., which says nothing about whose
 # machine recorded the take.
-PROFILE="${FIELDGUIDE_DEMO_PROFILE:-${TMPDIR:-/tmp}/fieldguide-demo}"
+# /var/tmp, not /tmp: verify's sandbox mounts a tmpfs over /tmp, so a profile
+# there takes the demo's plugins away from the boot it is checking, and the
+# take ends on a failed verify. /var/tmp is as anonymous and survives.
+PROFILE="${FIELDGUIDE_DEMO_PROFILE:-/var/tmp/fieldguide-demo}"
 CAST="$HERE/fieldguide.cast"
 SOCK="$(mktemp -u /tmp/fieldguide-demo-XXXXXX.sock)"
 GIF=
@@ -52,6 +55,18 @@ mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 # the throwaway profile as the only thing it can reach.
 rm -rf "$XDG_CONFIG_HOME/nvim"
 cp -R "$HERE/config" "$XDG_CONFIG_HOME/nvim"
+
+# A repository, because the take ends by toggling gitsigns' line blame, and
+# gitsigns attaches to nothing else. Committed under a name that is not yours:
+# blame text goes on screen.
+if [ ! -d "$XDG_CONFIG_HOME/nvim/.git" ]; then
+  git -C "$XDG_CONFIG_HOME/nvim" init -q
+  git -C "$XDG_CONFIG_HOME/nvim" add -A
+  git -C "$XDG_CONFIG_HOME/nvim" \
+    -c user.name="fieldguide demo" -c user.email="demo@example.com" \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null \
+    commit -q -m "the demo config"
+fi
 
 # Plugins first, off camera: a take that opens on lazy.nvim cloning
 # repositories is a take about lazy.nvim. `restore` rather than `install`, so
@@ -119,11 +134,25 @@ asciinema rec "$CAST" \
   --command "nvim --listen $SOCK '+e $XDG_CONFIG_HOME/nvim/init.lua'"
 
 wait "$DRIVER" || true
+
+# Trim the quit off the end. The driver ends the take by typing `:qa!`, and
+# whatever is last in the cast is what a looping gif rests on — the editor
+# tearing down rather than the answer worth reading.
+node -e '
+  const fs = require("node:fs");
+  const path = process.argv[1];
+  const lines = fs.readFileSync(path, "utf8").split("\n").filter(Boolean);
+  const cut = lines.findIndex((l, i) => i > 0 && /qa!/.test(JSON.parse(l)[2]));
+  if (cut > 0) fs.writeFileSync(path, lines.slice(0, cut).join("\n") + "\n");
+' "$CAST"
+
 echo "wrote $CAST"
 echo "  play:   asciinema play $CAST"
 echo "  share:  asciinema upload $CAST"
 
 if [ -n "$GIF" ]; then
-  agg --font-size 20 --theme asciinema "$CAST" "$HERE/fieldguide.gif"
+  # --last-frame-duration: a gif loops, and without a pause on the end the
+  # last answer is gone before it can be read.
+  agg --font-size 20 --theme asciinema --last-frame-duration 18 "$CAST" "$HERE/fieldguide.gif"
   echo "wrote $HERE/fieldguide.gif"
 fi

@@ -2,7 +2,8 @@
 # recorded Neovim, `wait <seconds>` lets what happened land, `#` is a comment.
 #
 # Keys are what `nvim --remote-send` takes, so <leader> is a literal space here
-# and <CR> is the Enter key.
+# and <CR> is the Enter key. The panel's prompt opens in insert mode, so a
+# question is typed as itself: a leading `i` would end up inside the question.
 #
 # The waits are wall-clock waits on a model. They are generous on purpose, and
 # `asciinema rec --idle-time-limit` caps the dead air in playback, so a wait
@@ -22,13 +23,26 @@ wait 3
 send which plugins do I have installed, and what is gitsigns for?<CR>
 wait 45
 
-# 2. The live keymap, joined to the plugin that set it.
+# 2. A live keymap, traced to the plugin that set it and the line that did.
 send what sets <lt>leader>gb, and which plugin does it come from?<CR>
 wait 45
 
-# 3. A plugin this config does not have, answered from the published index.
+# 3. A question about this config's behaviour, answered from what is installed.
 send I want inline git blame — do I have anything for that, or what should I add?<CR>
 wait 50
 
-# Long enough to read the last answer before playback ends.
-wait 4
+# ...and then have it make the change. This is the part nothing else does:
+# the edit lands in the config, and a sandboxed headless boot of the edited
+# config is attached to it, so "it still starts" is checked rather than hoped.
+send yes please — enable it by default<CR>
+wait 60
+
+# The file on the left, reloaded from disk, showing what was written.
+send <C-\><C-n>
+wait 1
+send <C-w>h
+wait 1
+send :e!<CR>
+wait 2
+send /current_line_blame<CR>
+wait 12
