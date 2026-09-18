@@ -18,7 +18,7 @@
 import { renameSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import * as gh from "./github.ts";
-import { loadCache, saveCache, describe, modelFromEnv, type Cache } from "./blurbs.ts";
+import { loadCache, saveCache, describe, modelFromEnv, providerBroken, type Cache } from "./blurbs.ts";
 import { isConfig } from "./shape.ts";
 
 const CACHE = new URL("./blurbs.json", import.meta.url).pathname;
@@ -125,6 +125,24 @@ async function main() {
   const auth = gh.token();
   const say = (s: string) => process.stderr.write(s);
 
+  // A carriage return redraws one line in a terminal. A log file has no
+  // cursor, so in CI the same writes become one line per update — 3,693 of
+  // them for the enrichment alone, which is how a run's few real lines get
+  // buried. There it prints every few hundred instead.
+  const tty = Boolean(process.stderr.isTTY);
+  const progress = (label: string) => {
+    let shown = 0;
+    const tick = (done: number, total: number) => {
+      if (tty) return say(`\r  ${label} ${done}/${total}`);
+      if (done !== total && done - shown < 250) return;
+      shown = done;
+      say(`  ${label} ${done}/${total}\n`);
+    };
+    // Whatever is on the current line is the caller's to close.
+    tick.end = () => { if (tty) say("\n"); };
+    return tick;
+  };
+
   say("reading awesome-neovim\n");
   const curated = await gh.awesome();
   const curatedBy = new Map(curated.map((s) => [s.full.toLowerCase(), s]));
@@ -136,8 +154,10 @@ async function main() {
 
   const names = [...new Set([...curated.map((s) => s.full), ...swept])].slice(0, limit);
   say(`querying GitHub for ${names.length} repos\n`);
-  const repos = await gh.enrich(names, auth, (d, t) => say(`\r  enriched ${d}/${t}`));
-  say(`\n  ${repos.size} resolved\n`);
+  const enriched = progress("enriched");
+  const repos = await gh.enrich(names, auth, enriched);
+  enriched.end();
+  say(`  ${repos.size} resolved\n`);
 
   // A curated plugin stays in whatever its stars; the sweep's floor is the only
   // thing keeping the long tail from being mostly abandoned experiments.
@@ -171,8 +191,11 @@ async function main() {
     const model = modelFromEnv();
     say(`describing ${needs.length} plugins with ${model.provider}/${model.model} (thinking: ${model.thinking || "pi's default"})\n`);
     const docs = await gh.docHeads(needs, auth);
+    const described = progress("described");
     let done = 0;
     let failed = 0;
+    let unanswered = 0;
+    let firstUnanswered = "";
     // Eight at a time: each is its own pi process, and the provider's rate limit
     // rather than this machine is what the number is chosen against.
     const queue = [...needs];
@@ -185,12 +208,16 @@ async function main() {
             repo,
             docs.get(repo.nameWithOwner.toLowerCase()) ?? null,
             model,
-            (name, why) => {
+            (name, why, kind) => {
               failed++;
+              if (kind === "provider") {
+                unanswered++;
+                firstUnanswered ||= why;
+              }
               // The first few in full, then a count: a misconfigured provider
               // fails on every plugin, and 2,000 identical lines would bury the
               // one line that says which.
-              if (failed <= 5) say(`\n  skipped ${name}: ${why}\n`);
+              if (failed <= 5) say(`${tty ? "\n" : ""}  skipped ${name}: ${why}\n`);
             },
           );
           if (blurb) cache[repo.nameWithOwner] = blurb;
@@ -198,12 +225,24 @@ async function main() {
           // for, and a run cancelled or timed out an hour in should keep the
           // hour. CI uploads whatever is on disk however the job ends.
           if (++done % 50 === 0) saveCache(CACHE, cache);
-          say(`\r  described ${done}/${needs.length}`);
+          described(done, needs.length);
         }
       }),
     );
-    say(`\n  ${failed} could not be described and fall back to their GitHub description\n`);
+    described.end();
+    say(`  ${done - failed} described, ${failed} fell back to their GitHub description`);
+    say(unanswered ? ` (${unanswered} unanswered by the provider)\n` : "\n");
+    // Saved before the verdict below: these blurbs are paid for either way.
     saveCache(CACHE, cache);
+
+    // A run the provider answered none of still writes a perfectly good file,
+    // one blurb poorer per plugin it was asked about. Nothing downstream can
+    // tell that from a quiet week, so it is said here, once, and loudly.
+    const broken = providerBroken(needs.length, unanswered, firstUnanswered);
+    if (broken) {
+      say(`::error::${broken}\n`);
+      process.exit(1);
+    }
   } else if (needs.length > 0) {
     say(`skipping ${needs.length} blurbs (--no-llm)\n`);
   }
