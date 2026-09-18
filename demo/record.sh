@@ -152,7 +152,8 @@ echo "  share:  asciinema upload $CAST"
 
 if [ -n "$GIF" ]; then
   # --last-frame-duration: a gif loops, and without a pause on the end the
-  # last answer is gone before it can be read.
-  agg --font-size 20 --theme asciinema --last-frame-duration 18 "$CAST" "$HERE/fieldguide.gif"
+  # last answer is gone before it can be read. Long enough to take in what is
+  # on screen, short enough not to look like the recording has hung.
+  agg --font-size 20 --theme asciinema --last-frame-duration 8 "$CAST" "$HERE/fieldguide.gif"
   echo "wrote $HERE/fieldguide.gif"
 fi
