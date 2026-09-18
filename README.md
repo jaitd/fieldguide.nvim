@@ -15,6 +15,16 @@ It does not interrupt you, review your diffs, or help with code outside your
 Neovim config. [sidekick.nvim](https://github.com/folke/sidekick.nvim) and
 [claudecode.nvim](https://github.com/coder/claudecode.nvim) cover that.
 
+## What it looks like
+
+[![fieldguide answering questions about a Neovim config](demo/fieldguide.gif)](https://asciinema.org/a/AAI2O4xI3V85GhKX)
+
+Asking what is installed, tracing `<leader>gb` to the plugin that set it, and
+then having the change made: the edit lands in the config and a sandboxed boot
+of the edited config is attached to it. [Play it full size, with selectable
+text](https://asciinema.org/a/AAI2O4xI3V85GhKX) — or record your own with
+`mise run demo` ([how](demo/README.md)).
+
 > **Status:** early. Everything described here works and is tested, but expect
 > rough edges. The agent runs on top of [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
 > from your `PATH`.
