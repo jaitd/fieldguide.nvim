@@ -10,12 +10,24 @@
 # tools/plugin-index/blurbs.json, sent back by this job as a pull request —
 # main only takes reviewed changes — so a normal week costs a few dozen model
 # calls rather than a few thousand.
+#
+# The cache diff is also the review: a blurb a poisoned repository talked the
+# model into writing is read by a person before it reaches anyone's editor.
+# So a week with new blurbs does not publish from the weekly run. Merging the
+# pull request pushes blurbs.json to main, and that push runs this job again
+# without the model, from the reviewed cache, to publish. A week with nothing
+# new to review publishes straight away.
 
 name: plugin index
 
 on:
   schedule:
     - cron: "17 4 * * 1"
+  # The reviewed cache landing on main. A hand edit to the file — pulling a
+  # blurb that slipped through — republishes the same way.
+  push:
+    branches: [main]
+    paths: [tools/plugin-index/blurbs.json]
   workflow_dispatch:
     inputs:
       no_llm:
@@ -31,6 +43,9 @@ env:
   # Where the blurb cache waits for review. One branch, not one per run, so a
   # week nobody merged is folded into the next run instead of piling up.
   CACHE_BRANCH: index/blurbs
+  # No model calls: the post-merge publish builds from the cache main just
+  # took, and a dispatch can ask for the same.
+  NO_LLM: ${{ github.event_name == 'push' || inputs.no_llm == true }}
 
 # Two runs would race on the cache commit and the release tag. Never cancel a
 # run in flight — it may already have spent model credits on blurbs that are
@@ -60,6 +75,7 @@ jobs:
       # only reaches later steps, but pnpm refuses a global install unless the
       # bin directory is on PATH already, so this step exports it for itself.
       - name: Install pi
+        if: ${{ env.NO_LLM != 'true' }}
         run: |
           export PNPM_HOME="$HOME/.local/share/pnpm"
           export PATH="$PNPM_HOME:$PATH"
@@ -74,7 +90,7 @@ jobs:
       # `--thinking off` is dropped and the model reasons at its own default.
       # The refresh only fetches for providers with a key, hence the env.
       - name: Refresh pi's model catalog
-        if: ${{ !inputs.no_llm }}
+        if: ${{ env.NO_LLM != 'true' }}
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pi update --models
@@ -83,6 +99,7 @@ jobs:
       # be open when the next run starts. Build from its copy when it is, or
       # the run pays again for every blurb main is still missing.
       - name: Start from the cache awaiting review
+        if: ${{ github.event_name != 'push' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -104,7 +121,7 @@ jobs:
           if [ -z "$OPENROUTER_API_KEY" ]; then
             echo "::warning::OPENROUTER_API_KEY is unset — building from the committed cache only"
             node tools/plugin-index/build.ts nvim-plugins.db --no-llm
-          elif [ "${{ inputs.no_llm }}" = "true" ]; then
+          elif [ "$NO_LLM" = "true" ]; then
             node tools/plugin-index/build.ts nvim-plugins.db --no-llm
           else
             node tools/plugin-index/build.ts nvim-plugins.db
@@ -115,7 +132,7 @@ jobs:
       # happens next — a failed gate, a rejected push, a cancel — so a lost run
       # costs a download rather than another pass over the model.
       - name: Keep the blurbs
-        if: ${{ always() }}
+        if: ${{ always() && github.event_name != 'push' }}
         uses: actions/upload-artifact@v7
         with:
           name: blurbs-${{ github.run_id }}
@@ -143,10 +160,12 @@ jobs:
           '
 
       - name: Open a pull request with the blurb cache
+        id: cache
         # Runs even when the gate above fails: the build writes the cache as
         # soon as the blurbs are done, and a rejected index is no reason to
-        # pay for them again next week.
-        if: ${{ !cancelled() }}
+        # pay for them again next week. Not on the post-merge run: main has
+        # the cache it built from.
+        if: ${{ !cancelled() && github.event_name != 'push' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -162,6 +181,7 @@ jobs:
              && git diff --quiet FETCH_HEAD -- tools/plugin-index/blurbs.json \
              && [ "$(gh pr list --head "$CACHE_BRANCH" --state open --json number --jq length)" != "0" ]; then
             echo "the open pull request already carries these blurbs"
+            echo "pending=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
@@ -211,8 +231,12 @@ jobs:
           else
             gh pr edit "$CACHE_BRANCH" --title "$subject" --body "$body"
           fi
+          echo "pending=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish
+        # Not while blurbs are waiting for review: merging them is what
+        # publishes, by way of the push trigger above.
+        if: ${{ steps.cache.outputs.pending != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
