@@ -35,6 +35,23 @@ the boot it sandboxes: from there, the demo's own plugins are missing inside
 the sandbox and the take ends on a failed verification. Worth checking the cast before publishing anyway:
 `asciinema play demo/fieldguide.cast`, and it is JSON, so `grep` works on it.
 
+## The config is a config
+
+`config/` reads like something a person would actually have: plugins, a leader
+key, a couple of options. Nothing in it explains the recording, because the file
+is on screen for the whole take and a config narrating its own demo is a config
+nobody would write. What is worth explaining is here instead:
+
+- **The plugin is installed from GitHub, not from this checkout.** A checkout is
+  outside every zone the agent may read, so the first answer would be punctuated
+  by the gate refusing to open the plugin's own README.
+- **`lua/keycast.lua` draws the keys being pressed**, bottom left. It is loaded
+  from the command line by `record.sh` rather than from `init.lua`, so the take
+  shows a config with no recording furniture in it.
+- **`NVIM_NOTTYFAST=1`** is set for the recorded editor. Nothing is behind the
+  recorded pty to answer Nvim's startup queries, and the unanswered one for
+  `'background'` opens the take with `E1568`. See `:help 'ttyfast'`.
+
 ## It does not record the same words twice
 
 The answers come from a model, through whichever provider `pi` is logged in to
