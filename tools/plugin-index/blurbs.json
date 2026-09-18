@@ -1213,16 +1213,16 @@
   "superseded_by": null
  },
  "aikhe/fleur.nvim": {
-  "ref": "55a9f098d2c5",
-  "blurb": "A low-contrast Neovim colorscheme with soft, garden-at-dusk-inspired tones.",
+  "ref": "ac84e8077067",
+  "blurb": "A low-contrast Neovim colorscheme with soft, muted tones inspired by a garden at dusk.",
   "category": "Colorscheme",
   "keywords": [
    "colorscheme",
    "theme",
-   "neovim theme",
    "color scheme",
    "low contrast",
-   "lua"
+   "soft colors",
+   "neovim theme"
   ],
   "superseded_by": null
  },
@@ -1485,17 +1485,18 @@
   "superseded_by": null
  },
  "AlexandrosAlexiou/kotlin.nvim": {
-  "ref": "v2.1.0",
-  "blurb": "Adds Kotlin language server features in Neovim, including import organization, formatting, inlay hints, folding, call hierarchy, file templates, and debugging.",
-  "category": "Programming Languages Support",
+  "ref": "v2.2.0",
+  "blurb": "Adds Neovim support for JetBrains' Kotlin language server, including inlay hints, call hierarchy, folding, file templates, and run/debug integration.",
+  "category": "Language",
   "keywords": [
    "kotlin",
-   "kotlin-lsp",
    "lsp",
    "language server",
-   "intellij",
-   "development",
-   "inlay hints"
+   "jetbrains",
+   "inlay hints",
+   "debugging",
+   "gradle",
+   "maven"
   ],
   "superseded_by": null
  },
@@ -1938,17 +1939,17 @@
   "superseded_by": "folke/todo-comments.nvim"
  },
  "amekusa/auto-input-switch.nvim": {
-  "ref": "v5.2.0",
-  "blurb": "Automatically switches your operating system input method or IME based on editing context, restoring Latin input outside Insert mode and matching nearby text.",
+  "ref": "v5.2.1",
+  "blurb": "Automatically switches the system input method (IME) based on editing context, keeping Latin input outside Insert mode and restoring or matching the language you were typing.",
   "category": "Editing Support",
   "keywords": [
-   "ime",
    "input method",
-   "input method switcher",
-   "cjk",
-   "japanese",
-   "keyboard layout",
+   "ime",
+   "input source",
    "multilingual",
+   "cjk",
+   "keyboard layout",
+   "insert mode",
    "autocompletion"
   ],
   "superseded_by": null
@@ -2816,6 +2817,22 @@
    "paste",
    "fzf",
    "autocompletion"
+  ],
+  "superseded_by": null
+ },
+ "AsaEdgerunner/vim-nvim-mastery": {
+  "ref": "cc0a30f90f14",
+  "blurb": "Teaches Vim and Neovim from beginner to advanced in Persian, covering modes, motions, editing, configuration, plugins, LSP, and workflows.",
+  "category": "External Resource",
+  "keywords": [
+   "vim tutorial",
+   "neovim course",
+   "learn vim",
+   "persian",
+   "farsi",
+   "vim cheatsheet",
+   "neovim lua",
+   "vim motions"
   ],
   "superseded_by": null
  },
@@ -4481,18 +4498,17 @@
   "superseded_by": null
  },
  "btj93/fireworks.nvim": {
-  "ref": "61212bf57220",
-  "blurb": "Launches a firework animation of virtual text and highlight extmarks in the buffer each time a file is saved, without modifying the file.",
+  "ref": "723f7fe39f01",
+  "blurb": "Draws animated fireworks in the buffer as extmark overlays every time you save a file, without modifying the file text.",
   "category": "Animation",
   "keywords": [
    "fireworks",
-   "save",
+   "animation",
    "extmarks",
-   "virtual text",
+   "save",
    "ui",
-   "fun",
-   "effect",
-   "animation"
+   "effects",
+   "visual"
   ],
   "superseded_by": null
  },
@@ -4904,8 +4920,8 @@
   "superseded_by": null
  },
  "Cassin01/wf.nvim": {
-  "ref": "v1.0.3",
-  "blurb": "Shows pending keymap continuations in a single bottom-right row and lets you fuzzy-search keybindings, marks, buffers, bookmarks, and registers.",
+  "ref": "v1.0.4",
+  "blurb": "Shows pending keybinding continuations in a compact bar and lets you fuzzy-search mappings, marks, buffers, registers, and bookmarks.",
   "category": "Keybinding",
   "keywords": [
    "which-key",
@@ -4913,9 +4929,9 @@
    "keybindings",
    "fuzzy finder",
    "fuzzy search",
-   "shortcuts",
-   "cheatsheet",
-   "picker"
+   "picker",
+   "marks",
+   "buffers"
   ],
   "superseded_by": null
  },
@@ -5289,17 +5305,18 @@
   "superseded_by": null
  },
  "chip/telescope-software-licenses.nvim": {
-  "ref": "v2.0.1",
-  "blurb": "Browse common software licenses from SPDX in a Telescope picker and paste the chosen license text into a buffer.",
+  "ref": "v2.0.2",
+  "blurb": "Browse hundreds of SPDX software licenses in a Telescope picker and paste the chosen license text into a buffer.",
   "category": "Search",
   "keywords": [
-   "license",
    "licenses",
+   "license",
    "telescope",
-   "picker",
+   "telescope extension",
    "spdx",
+   "picker",
    "fuzzy finder",
-   "software licensing"
+   "insert license"
   ],
   "superseded_by": null
  },
@@ -5853,17 +5870,17 @@
   "superseded_by": null
  },
  "comfysage/artio.nvim": {
-  "ref": "8fb9b8a96c37",
-  "blurb": "A fuzzy file picker for Neovim with prompt and list UI, built-in matchfuzzy filtering, and optional filetype icons.",
+  "ref": "ebf5ed35bf17",
+  "blurb": "Provides a lightweight file picker with fuzzy filtering, live preview, and built-in pickers for files, buffers, grep, and help tags.",
   "category": "Fuzzy Finder",
   "keywords": [
    "fuzzy finder",
-   "picker",
    "file picker",
    "fuzzy search",
-   "autocompletion",
-   "ui2",
-   "telescope alternative"
+   "picker",
+   "telescope alternative",
+   "file navigation",
+   "ui2"
   ],
   "superseded_by": null
  },
@@ -7571,18 +7588,18 @@
   "superseded_by": null
  },
  "dmtrKovalenko/fff": {
-  "ref": "0.10.7-nightly.4083ea0",
-  "blurb": "Provides a fast, typo-resistant file and content search picker for opening files and grepping inside Neovim.",
+  "ref": "0.10.7-nightly.914c91e",
+  "blurb": "File and content search picker for Neovim with typo-tolerant matching and frecency-ranked results.",
   "category": "Fuzzy Finder",
   "keywords": [
    "file search",
    "fuzzy finder",
-   "fuzzy search",
    "picker",
    "grep",
    "live grep",
-   "fzf alternative",
-   "file finder"
+   "frecency",
+   "ripgrep",
+   "fzf alternative"
   ],
   "superseded_by": null
  },
@@ -10396,17 +10413,17 @@
   "superseded_by": null
  },
  "georgeguimaraes/review.nvim": {
-  "ref": "v1.9.1",
-  "blurb": "Adds line and range comments to diff views, then exports them as AI-ready markdown for chat tools.",
+  "ref": "v1.10.1",
+  "blurb": "Adds line and range comments to diff views for reviewing code changes, then exports them as markdown for AI chats or the clipboard.",
   "category": "Git",
   "keywords": [
    "code review",
    "diff",
-   "comments",
    "annotations",
-   "git diff",
-   "ai export",
-   "codediff"
+   "comments",
+   "git",
+   "markdown export",
+   "pull request"
   ],
   "superseded_by": null
  },
@@ -11848,17 +11865,18 @@
   "superseded_by": null
  },
  "huggingface/llm.nvim": {
-  "ref": "fdc0758187da",
-  "blurb": "Provides AI-powered ghost-text code completion in Neovim using Hugging Face, Ollama, or OpenAI backends.",
-  "category": "AI",
+  "ref": "c7fdccf64375",
+  "blurb": "Provides ghost-text code completion in Neovim by sending prompts to LLM backends such as Hugging Face, Ollama, or OpenAI-compatible endpoints.",
+  "category": "Completion",
   "keywords": [
-   "ai",
    "llm",
+   "ai",
    "code completion",
    "autocompletion",
+   "ghost text",
    "copilot",
    "huggingface",
-   "ghost text"
+   "ollama"
   ],
   "superseded_by": null
  },
@@ -13282,32 +13300,33 @@
   "superseded_by": null
  },
  "jecaro/fugitive-difftool.nvim": {
-  "ref": "2b989824e953",
-  "blurb": "Navigates a quickfix list of diffs between two git revisions, making it easier to review changes across branches.",
+  "ref": "c31529f53479",
+  "blurb": "Browse and jump between changes from a Fugitive difftool comparison of two git revisions using the quickfix list, useful for code review.",
   "category": "Git",
   "keywords": [
    "git",
-   "fugitive",
-   "difftool",
    "diff",
+   "difftool",
    "quickfix",
+   "fugitive",
    "code review",
-   "branch comparison"
+   "branch comparison",
+   "revisions"
   ],
   "superseded_by": null
  },
  "jecaro/ghcid-error-file.nvim": {
-  "ref": "d9806845c74a",
-  "blurb": "Parses the error file produced by ghcid or ghciwatch and fills Neovim's quickfix list with Haskell compile errors.",
+  "ref": "59c001551153",
+  "blurb": "Parses the error file produced by ghcid or ghciwatch and fills Neovim's quickfix list with the Haskell errors found.",
   "category": "Quickfix",
   "keywords": [
    "haskell",
    "ghcid",
    "ghciwatch",
    "quickfix",
+   "compiler errors",
    "error file",
-   "compile errors",
-   "ghc"
+   "ghci"
   ],
   "superseded_by": null
  },
@@ -13631,16 +13650,17 @@
   "superseded_by": null
  },
  "jiaoshijie/undotree": {
-  "ref": "02b69aed427b",
-  "blurb": "Visualizes Neovim's internal undo tree so you can navigate branches and preview diffs between undo states.",
+  "ref": "5721c3fb3876",
+  "blurb": "Visualizes Neovim's internal undo tree in a panel, with diff preview between the current state and the state under the cursor.",
   "category": "Editing Support",
   "keywords": [
    "undotree",
    "undo history",
-   "undo tree",
-   "undo branches",
+   "undo",
+   "redo",
+   "history",
    "diff preview",
-   "history navigation"
+   "undo tree"
   ],
   "superseded_by": null
  },
@@ -13990,6 +14010,21 @@
    "neovim setup",
    "lsp",
    "kickstart"
+  ],
+  "superseded_by": null
+ },
+ "jonathanmorris180/salesforce.nvim": {
+  "ref": "v1.7.0",
+  "blurb": "Provides commands to run anonymous Apex, execute Apex tests, and push, pull, or diff files against a Salesforce org from Neovim.",
+  "category": "Programming Languages Support",
+  "keywords": [
+   "salesforce",
+   "apex",
+   "sfdx",
+   "salesforce cli",
+   "org management",
+   "lwc",
+   "aura"
   ],
   "superseded_by": null
  },
@@ -15140,17 +15175,17 @@
   "superseded_by": null
  },
  "kjuq/skkelua.nvim": {
-  "ref": "7bf23a3ddcec",
-  "blurb": "Provides a Japanese SKK input method with dictionary lookup, conversion candidates, and a mode indicator inside Neovim.",
+  "ref": "d3a1185ab97f",
+  "blurb": "Provides an SKK Japanese input method for Neovim, with dictionary lookup, kana conversion, in-process completion suggestions, and a mode indicator.",
   "category": "Editing Support",
   "keywords": [
    "skk",
    "japanese input",
    "ime",
    "input method",
-   "autocompletion",
    "henkan",
-   "romaji"
+   "autocompletion",
+   "kana"
   ],
   "superseded_by": null
  },
@@ -16187,18 +16222,34 @@
   ],
   "superseded_by": null
  },
+ "lettertwo/laserwave.nvim": {
+  "ref": "v3.1.0",
+  "blurb": "An 80's synthwave and outrun inspired Neovim colorscheme ported from the VS Code LaserWave theme, with original and high-contrast flavors.",
+  "category": "Colorscheme",
+  "keywords": [
+   "colorscheme",
+   "theme",
+   "synthwave",
+   "outrun",
+   "laserwave",
+   "retro",
+   "high contrast",
+   "lualine"
+  ],
+  "superseded_by": null
+ },
  "lewis6991/async.nvim": {
-  "ref": "ca8f5696c45b",
-  "blurb": "Lets Lua code wait on timers, callbacks, and child tasks without blocking Neovim's event loop.",
+  "ref": "15f28ec323a7",
+  "blurb": "Provides a structured async/await API so Neovim Lua plugins can write callback-driven work in a direct style without blocking the event loop.",
   "category": "Neovim Lua Development",
   "keywords": [
    "async",
-   "asynchronous",
-   "coroutine",
    "await",
+   "coroutine",
    "concurrency",
    "lua library",
-   "callback"
+   "callback",
+   "event loop"
   ],
   "superseded_by": null
  },
@@ -16908,17 +16959,17 @@
   "superseded_by": null
  },
  "lucaSartore/fastspell.nvim": {
-  "ref": "c7343a923862",
-  "blurb": "Runs a cspell-based spell checker in Neovim that handles CamelCase and snake_case text and reports misspellings as you type.",
+  "ref": "0b3e3fe9e0b8",
+  "blurb": "Checks spelling in code comments and text as you type by running cspell through a persistent Node client, marking misspelled words in the buffer.",
   "category": "LSP",
   "keywords": [
-   "spell check",
-   "spellchecker",
-   "spelling",
+   "spellcheck",
+   "spell checker",
    "cspell",
-   "diagnostics",
    "typos",
-   "linter"
+   "autocorrect",
+   "diagnostics",
+   "proofreading"
   ],
   "superseded_by": null
  },
@@ -17713,6 +17764,38 @@
    "syntax highlighting",
    "tree-sitter",
    "filetype"
+  ],
+  "superseded_by": null
+ },
+ "maralla/completor.vim": {
+  "ref": "8ab19d1394de",
+  "blurb": "Provides asynchronous code completion for Vim 8, sourcing candidates from buffers, filenames, LSP tools, and semantic backends like jedi, racer, tern, and clang.",
+  "category": "Completion",
+  "keywords": [
+   "completion",
+   "autocomplete",
+   "autocompletion",
+   "code completion",
+   "omni-completion",
+   "lsp",
+   "vim8",
+   "async"
+  ],
+  "superseded_by": null
+ },
+ "MaraniMatias/codereview.nvim": {
+  "ref": "v0.5.0",
+  "blurb": "Review any git diff inside Neovim with a two-panel explorer and diff view, adding inline notes that export to a Markdown review file.",
+  "category": "Git",
+  "keywords": [
+   "code review",
+   "git diff",
+   "diff review",
+   "inline comments",
+   "annotations",
+   "markdown export",
+   "difftool",
+   "notes"
   ],
   "superseded_by": null
  },
@@ -19160,15 +19243,16 @@
   "superseded_by": null
  },
  "mitchpaulus/autocorrect.vim": {
-  "ref": "d06009f69278",
-  "blurb": "Automatically fixes common misspellings as you type by loading a personal list of correction abbreviations into Vim/Neovim.",
+  "ref": "12f32e9d07c8",
+  "blurb": "Automatically corrects common misspellings as you type in Vim by expanding personal abbreviation entries.",
   "category": "Editing Support",
   "keywords": [
    "autocorrect",
    "spelling",
-   "misspelling",
    "typo",
-   "abbreviations",
+   "abbreviation",
+   "autocompletion",
+   "misspelling",
    "text correction"
   ],
   "superseded_by": null
@@ -19251,15 +19335,16 @@
   "superseded_by": null
  },
  "MoaidHathot/Neovim-Moaid": {
-  "ref": "ff4f12f89252",
-  "blurb": "A ready-made Neovim configuration for Windows and Linux with .NET development support built in.",
+  "ref": "ab7cfb9f78b2",
+  "blurb": "A ready-made Neovim configuration for Windows and Linux aimed at .NET and C# development.",
   "category": "Pre-made Configuration",
   "keywords": [
    "neovim config",
    "dotfiles",
    "dotnet",
    "c#",
-   "premade configuration",
+   "nvim configuration",
+   "distro",
    "windows",
    "linux"
   ],
@@ -19420,17 +19505,17 @@
   "superseded_by": null
  },
  "mp248/clingy.nvim": {
-  "ref": "83c1caa69b95",
-  "blurb": "Makes line numbers indent to follow the text on each line, instead of sitting in a fixed gutter column.",
+  "ref": "7cf14fd205f9",
+  "blurb": "Displays line numbers that are pushed right to sit next to the indentation of each line rather than in a fixed column.",
   "category": "UI",
   "keywords": [
    "line numbers",
    "gutter",
-   "indent",
-   "linenr",
+   "indentation",
    "relative numbers",
-   "ruler",
-   "ui"
+   "statuscolumn",
+   "line number alignment",
+   "cursorline"
   ],
   "superseded_by": null
  },
@@ -20646,18 +20731,18 @@
   "superseded_by": null
  },
  "NicholasZolton/neojj": {
-  "ref": "v1.6.2",
-  "blurb": "Provides a Magit-style interactive interface in Neovim for working with jj (Jujutsu) version control, including status, log, and operation views.",
+  "ref": "v1.8.0",
+  "blurb": "Provides a Magit-style interactive UI for the Jujutsu (jj) version control system inside Neovim.",
   "category": "Git",
   "keywords": [
    "jujutsu",
    "jj",
-   "version control",
    "vcs",
    "magit",
+   "version control",
    "git",
-   "neogit",
-   "diff"
+   "status buffer",
+   "interface"
   ],
   "superseded_by": null
  },
@@ -25658,9 +25743,9 @@
   "superseded_by": null
  },
  "rizukirr/droid-nvim": {
-  "ref": "v0.1.0",
-  "blurb": "Android development workflow for Neovim: build, run, deploy and debug Android apps from the editor via Gradle and adb.",
-  "category": "Web Development",
+  "ref": "v0.1.1",
+  "blurb": "Build, run, and debug Android apps from Neovim with Gradle, adb, emulators, and Kotlin/Java/Groovy LSP support.",
+  "category": "Programming Languages Support",
   "keywords": [
    "android",
    "kotlin",
@@ -25668,8 +25753,8 @@
    "gradle",
    "adb",
    "emulator",
-   "mobile development",
-   "lsp"
+   "lsp",
+   "mobile development"
   ],
   "superseded_by": null
  },
@@ -26107,6 +26192,22 @@
    "floating window",
    "web development",
    "treesitter"
+  ],
+  "superseded_by": null
+ },
+ "ruicsh/tailwindcss-dial.nvim": {
+  "ref": "dd8fe2e24e11",
+  "blurb": "Adds dial.nvim augends so incrementing and decrementing values cycles through TailwindCSS color shades and utility classes.",
+  "category": "Editing Support",
+  "keywords": [
+   "tailwindcss",
+   "tailwind",
+   "dial",
+   "increment",
+   "decrement",
+   "css classes",
+   "color shades",
+   "autocompletion"
   ],
   "superseded_by": null
  },
@@ -27893,6 +27994,21 @@
   ],
   "superseded_by": null
  },
+ "smart-splits-nvim/backend-ghostty": {
+  "ref": "v0.8.0",
+  "blurb": "Lets you use the same keys to move between Neovim splits and Ghostty or cmux panes on macOS, handling navigation at editor edges via Ghostty's AppleScript API.",
+  "category": "Split and Window",
+  "keywords": [
+   "split navigation",
+   "window navigation",
+   "ghostty",
+   "terminal multiplexer",
+   "smart-splits",
+   "pane navigation",
+   "macos"
+  ],
+  "superseded_by": null
+ },
  "smart-splits-nvim/smart-splits.nvim": {
   "ref": "v2.1.0",
   "blurb": "Navigate and resize Neovim and terminal-multiplexer split panes directionally, moving up, down, left, and right across pane boundaries.",
@@ -29200,6 +29316,22 @@
   ],
   "superseded_by": null
  },
+ "tamton-aquib/essentials.nvim": {
+  "ref": "6bcb274ca2cb",
+  "blurb": "A small collection of utility Lua functions for Neovim covering URL opening, cheat.sh search, file running, commenting, folding, booleans, and floating UI helpers.",
+  "category": "Utility",
+  "keywords": [
+   "utility",
+   "helper functions",
+   "lua",
+   "cheat.sh",
+   "comment",
+   "fold",
+   "floating window",
+   "run file"
+  ],
+  "superseded_by": null
+ },
  "tamton-aquib/flirt.nvim": {
   "ref": "7726d8cbe8b3",
   "blurb": "Animates, moves, and resizes floating windows in Neovim, with default keymaps for arrow-key movement, resizing, and mouse dragging.",
@@ -30218,6 +30350,20 @@
   ],
   "superseded_by": null
  },
+ "uga-rosa/translate.nvim": {
+  "ref": "1a841e56407b",
+  "blurb": "Translate selected text or the word under the cursor using an external translation command or API, with results shown in a float, split, buffer, or register.",
+  "category": "Utility",
+  "keywords": [
+   "translation",
+   "translate",
+   "deepl",
+   "google translate",
+   "language",
+   "text"
+  ],
+  "superseded_by": null
+ },
  "uga-rosa/ugaterm.nvim": {
   "ref": "v1.0.0",
   "blurb": "Opens, hides, and manages named terminal buffers within Neovim, with commands to toggle, create, select, and send lines to them.",
@@ -31022,16 +31168,17 @@
   "superseded_by": null
  },
  "vscode-neovim/vscode-neovim": {
-  "ref": "v1.19.3",
-  "blurb": "Runs a real embedded Neovim instance as the backend so you get Vim keybindings and most Neovim plugins inside VS Code.",
+  "ref": "v1.20.0",
+  "blurb": "Runs a real Neovim instance as the Vim backend for VS Code, giving Vim keybindings, commands, and plugin support inside the editor.",
   "category": "External Resource",
   "keywords": [
+   "vim",
+   "neovim",
    "vscode",
-   "vim mode",
-   "neovim integration",
    "editor integration",
    "keybindings",
-   "neovim gui"
+   "vim mode",
+   "gui"
   ],
   "superseded_by": null
  },
@@ -31050,14 +31197,14 @@
   "superseded_by": null
  },
  "vuki656/review.nvim": {
-  "ref": "b14355fe82cd",
-  "blurb": "Browse git diffs in a dedicated tab, attach typed comments to specific diff lines, and export them as markdown to an AI agent or clipboard.",
+  "ref": "17908cbdb498",
+  "blurb": "Review git diffs in a dedicated tab, attach comments to specific diff lines, and export them as markdown to an AI agent or clipboard.",
   "category": "Git",
   "keywords": [
-   "git diff",
    "code review",
-   "diff viewer",
-   "comments",
+   "git diff",
+   "diff review",
+   "comment",
    "ai agent",
    "markdown export",
    "git"
@@ -32426,6 +32573,21 @@
   ],
   "superseded_by": null
  },
+ "XiaoCRQ/Faster-OJ.nvim": {
+  "ref": "507de8873f88",
+  "blurb": "Fetches competitive programming problems, runs local judging and stress tests, and submits solutions from within Neovim.",
+  "category": "Competitive Programming",
+  "keywords": [
+   "competitive programming",
+   "online judge",
+   "codeforces",
+   "local judge",
+   "stress test",
+   "problem fetching",
+   "submit solution"
+  ],
+  "superseded_by": null
+ },
  "xiyaowong/fast-cursor-move.nvim": {
   "ref": "9ab80d018486",
   "blurb": "Accelerates hjkl cursor movement, speeding up repeated presses in Neovim and vscode-neovim.",
@@ -33098,17 +33260,17 @@
   "superseded_by": null
  },
  "yukimemi/futago.vim": {
-  "ref": "7d0c342155b6",
-  "blurb": "Provides a Google Gemini chat interface inside Vim and Neovim, including helpers that generate commit messages from git or jj diffs.",
+  "ref": "07ba3748979b",
+  "blurb": "Provides a Google Gemini chat interface inside Vim and Neovim, and can generate commit messages from staged git or jj diffs.",
   "category": "AI",
   "keywords": [
+   "ai",
    "gemini",
    "chat",
-   "ai",
    "llm",
-   "commit message",
    "denops",
-   "vim"
+   "commit message",
+   "git"
   ],
   "superseded_by": null
  },
