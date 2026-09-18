@@ -9,7 +9,15 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CATEGORIES, validate, contradicts, evidence, loadCache, saveCache } from "../tools/plugin-index/blurbs.ts";
+import {
+  CATEGORIES,
+  validate,
+  contradicts,
+  evidence,
+  loadCache,
+  saveCache,
+  providerBroken,
+} from "../tools/plugin-index/blurbs.ts";
 
 const repo = (over: Record<string, unknown> = {}) =>
   ({
@@ -121,4 +129,21 @@ test("a successor has to be a repository, and cannot be the plugin itself", () =
   assert.equal(ok(true), null);
   // Absent is the overwhelmingly common case and must not fail validation.
   assert.equal(validate({ blurb: "x", category: "Git", keywords: ["ab"] }, "r", "a/b")?.superseded_by, null);
+});
+
+test("a provider that answered nothing fails the build, a bad week does not", () => {
+  // The run this was written for: a revoked key, 401 on all 41 plugins, an
+  // index built anyway and published a blurb poorer.
+  assert.match(providerBroken(41, 41, "401: User not found"), /41 of 41 plugins: 401: User not found/);
+  assert.ok(providerBroken(41, 30));
+
+  // Replies that arrived and were unusable are the repositories' business,
+  // not the run's: those plugins fall back to their GitHub description.
+  assert.equal(providerBroken(41, 0), null);
+  assert.equal(providerBroken(41, 20), null);
+
+  // Too few to tell a dead key from one slow model call, and a week with a
+  // couple of new plugins is not worth failing over either way.
+  assert.equal(providerBroken(2, 2), null);
+  assert.equal(providerBroken(0, 0), null);
 });

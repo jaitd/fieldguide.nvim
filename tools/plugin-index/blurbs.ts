@@ -242,15 +242,37 @@ export function modelFromEnv(): Model {
 }
 
 /**
+ * Below this a provider failure is one plugin's bad luck — a slow model, a
+ * blip. Above it, on most of the plugins asked about, it is the run: a key
+ * that expired, a provider that answers 401 to everything. The index built
+ * from it is valid and quietly worse, which is the shape of failure this
+ * guards against, so it is worth a red build rather than a green one.
+ */
+const ENOUGH_TO_JUDGE = 3;
+
+export function providerBroken(attempted: number, provider: number, why?: string): string | null {
+  if (attempted < ENOUGH_TO_JUDGE || provider * 2 <= attempted) return null;
+  return `the model provider failed on ${provider} of ${attempted} plugins${why ? `: ${why}` : ""}`;
+}
+
+/**
  * One pi process per plugin. Slower than a batched API call and worth it: pi
  * already owns provider selection, credentials and retries, so the builder
  * stays a script rather than growing an HTTP client per vendor.
  */
+/**
+ * Why a plugin has no blurb. "provider" is the call never producing a reply —
+ * a missing key, a dead one, a timeout; "reply" is a reply that arrived and
+ * was not usable. One says the run is broken, the other says this repository
+ * is awkward, and only the first is worth failing a build over.
+ */
+export type SkipKind = "provider" | "reply";
+
 export async function describe(
   repo: Repo,
   doc: string | null,
   model: Model,
-  onSkip?: (name: string, why: string) => void,
+  onSkip?: (name: string, why: string, kind: SkipKind) => void,
 ): Promise<Blurb | null> {
   const argv = [
     "-p", "--no-tools", "--no-extensions", "--no-skills", "--no-prompt-templates",
@@ -262,12 +284,12 @@ export async function describe(
     ...(model.thinking ? ["--thinking", model.thinking] : []),
     prompt(repo, doc),
   ];
-  const skip = (why: string): null => {
+  const skip = (why: string, kind: SkipKind = "reply"): null => {
     // Every skip says why. A pipeline that turns "the model timed out", "the
     // provider is misconfigured" and "the repository is too thin to describe"
     // all into a silent null is one where a broken run and a quiet week look
     // exactly alike.
-    onSkip?.(repo.nameWithOwner, why);
+    onSkip?.(repo.nameWithOwner, why, kind);
     return null;
   };
 
@@ -278,7 +300,7 @@ export async function describe(
     const hint = res.why.startsWith("timed out")
       ? ` — is ${model.model || "the default model"} reasoning (thinking: ${model.thinking || "pi's default"})?`
       : "";
-    return skip(res.why + hint);
+    return skip(res.why + hint, "provider");
   }
 
   const json = extractJson(res.stdout);
