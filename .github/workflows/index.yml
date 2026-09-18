@@ -197,11 +197,12 @@ jobs:
             echo "::error::could not push the blurb cache; it is attached to this run as blurbs-${{ github.run_id }}"
             exit 1
           fi
-          body="Blurbs written by the plugin index job in run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
-
-The same run publishes the index it built; this is the cache that keeps next week's run from paying for the same blurbs again. Review the diff for anything a repository talked the model into saying, then squash-merge. A week left unmerged is folded into the next run's pull request.
-
-The test workflow does not run here: pull requests opened with the job's own token do not trigger other workflows, and nothing outside the cache changes."
+          body=$(printf '%s\n' \
+            "Blurbs written by the plugin index job in run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}." \
+            "" \
+            "The same run publishes the index it built; this is the cache that keeps next week's run from paying for the same blurbs again. Review the diff for anything a repository talked the model into saying, then squash-merge. A week left unmerged is folded into the next run's pull request." \
+            "" \
+            "The test workflow does not run here: pull requests opened with the job's own token do not trigger other workflows, and nothing outside the cache changes.")
           # Pull requests opened with the job's token do not start other
           # workflows, which is fine: the ruleset requires a review, not a
           # status check, and only the cache changes.
