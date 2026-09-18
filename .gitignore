@@ -8,3 +8,8 @@ mise.local.toml
 # Built indexes. The artifact is released, never committed.
 nvim-plugins.db
 nvim-plugins.db.gz
+
+# The demo profile: a throwaway Neovim config tree, its plugins and its index.
+demo/.profile/
+# Takes. A cast is cheap to record again; commit a rendered gif on purpose.
+demo/fieldguide.cast

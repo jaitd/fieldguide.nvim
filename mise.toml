@@ -129,6 +129,12 @@ mkdir -p "$dir"
 node tools/plugin-index/build.ts "$dir/nvim-plugins.db" {{arg(name="args", var=true, default="")}}
 """
 
+# The recording is scripted so it can be made again after a UI change, rather
+# than performed once and never reproduced.
+[tasks.demo]
+description = "Record the demo cast against demo/config (needs a pi provider)"
+run = "./demo/record.sh {{arg(name='args', var=true, default='')}}"
+
 [tasks.fmt]
 description = "Format Lua"
 run = "stylua lua bin tests"

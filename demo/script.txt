@@ -1,0 +1,34 @@
+# What the recording does, one step per line: `send <keys>` types into the
+# recorded Neovim, `wait <seconds>` lets what happened land, `#` is a comment.
+#
+# Keys are what `nvim --remote-send` takes, so <leader> is a literal space here
+# and <CR> is the Enter key.
+#
+# The waits are wall-clock waits on a model. They are generous on purpose, and
+# `asciinema rec --idle-time-limit` caps the dead air in playback, so a wait
+# that is too long costs a second of playback and a wait that is too short
+# costs the take.
+
+# The config the agent is confined to, open on the left.
+wait 2
+
+# The panel. Nothing is bound by default; the demo config opts in to <leader>fg,
+# which is what most people will set.
+send  fg
+wait 3
+
+# 1. Answered from the plugins this config has installed, not from a model's
+#    memory of what plugins exist.
+send iwhich plugins do I have installed, and what is gitsigns for?<CR>
+wait 45
+
+# 2. The live keymap, joined to the plugin that set it.
+send iwhat sets <lt>leader>fg, and what else does that plugin bind?<CR>
+wait 45
+
+# 3. A plugin this config does not have, answered from the published index.
+send iI want inline git blame — do I have anything for that, or what should I add?<CR>
+wait 50
+
+# Long enough to read the last answer before playback ends.
+wait 4
