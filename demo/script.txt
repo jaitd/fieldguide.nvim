@@ -19,15 +19,15 @@ wait 3
 
 # 1. Answered from the plugins this config has installed, not from a model's
 #    memory of what plugins exist.
-send iwhich plugins do I have installed, and what is gitsigns for?<CR>
+send which plugins do I have installed, and what is gitsigns for?<CR>
 wait 45
 
 # 2. The live keymap, joined to the plugin that set it.
-send iwhat sets <lt>leader>fg, and what else does that plugin bind?<CR>
+send what sets <lt>leader>gb, and which plugin does it come from?<CR>
 wait 45
 
 # 3. A plugin this config does not have, answered from the published index.
-send iI want inline git blame — do I have anything for that, or what should I add?<CR>
+send I want inline git blame — do I have anything for that, or what should I add?<CR>
 wait 50
 
 # Long enough to read the last answer before playback ends.

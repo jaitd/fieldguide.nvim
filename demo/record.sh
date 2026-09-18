@@ -10,8 +10,9 @@
 # asciinema records the terminal the editor is drawing in.
 #
 # The recording runs against demo/config, never your own: XDG_CONFIG_HOME and
-# the data, state and cache directories all point inside demo/.profile, which
-# is gitignored. No path of yours reaches the screen.
+# the data, state and cache directories all point inside a throwaway profile in
+# your temp directory. No path of yours reaches the screen, including in the
+# answers, which quote the files they came from.
 #
 # It does talk to a model, through whichever provider pi is logged in to
 # (FIELDGUIDE_DEMO_PROVIDER and FIELDGUIDE_DEMO_MODEL override it), so the
@@ -20,7 +21,11 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-PROFILE="$HERE/.profile"
+# Outside the checkout and outside $HOME: the agent quotes paths in its answers
+# — the file a keymap came from, the config it read — and those go on screen.
+# From here they read /tmp/fieldguide-demo/..., which says nothing about whose
+# machine recorded the take.
+PROFILE="${FIELDGUIDE_DEMO_PROFILE:-${TMPDIR:-/tmp}/fieldguide-demo}"
 CAST="$HERE/fieldguide.cast"
 SOCK="$(mktemp -u /tmp/fieldguide-demo-XXXXXX.sock)"
 GIF=
@@ -37,7 +42,9 @@ export XDG_CONFIG_HOME="$PROFILE/config"
 export XDG_DATA_HOME="$PROFILE/data"
 export XDG_STATE_HOME="$PROFILE/state"
 export XDG_CACHE_HOME="$PROFILE/cache"
-export FIELDGUIDE_DEMO_REPO="$REPO"
+# Unset by default: the demo installs the plugin from GitHub, so the take shows
+# what a user gets and the agent can read the plugin's docs in its own zone.
+if [ "${FIELDGUIDE_DEMO_LOCAL:-}" = "1" ]; then export FIELDGUIDE_DEMO_REPO="$REPO"; fi
 
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 # Copied in, not symlinked: the config tree is the agent's read/write zone, and

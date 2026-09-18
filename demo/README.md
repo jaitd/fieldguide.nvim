@@ -16,14 +16,19 @@ instead of re-enacted. `record.sh` starts Neovim under `asciinema` and plays
 | `config/` | the Neovim config the recording answers from |
 | `config/lazy-lock.json` | its plugins, pinned, so takes stay comparable |
 | `record.sh` | the recorder |
-| `.profile/` | the throwaway Neovim profile (gitignored) |
+| `/tmp/fieldguide-demo/` | the throwaway Neovim profile the take runs in |
 
 ## It does not record your config
 
 `XDG_CONFIG_HOME` and the data, state and cache directories all point inside
-`demo/.profile`, and `config/` is copied there rather than symlinked, so the
-agent's read/write zone is the throwaway copy and not this checkout. No path of
-yours reaches the screen. Worth checking the cast before publishing anyway:
+`/tmp/fieldguide-demo`, and `config/` is copied there rather than symlinked, so
+the agent's read/write zone is the throwaway copy and not this checkout.
+
+The profile lives outside `$HOME` because the answers quote paths — the file a
+keymap came from, the config that was read — so a profile under your home would
+put your home on screen. From a temp directory those lines read
+`/tmp/fieldguide-demo/config/nvim/init.lua`, which says nothing about whose
+machine recorded the take. `FIELDGUIDE_DEMO_PROFILE` moves it. Worth checking the cast before publishing anyway:
 `asciinema play demo/fieldguide.cast`, and it is JSON, so `grep` works on it.
 
 ## It does not record the same words twice
