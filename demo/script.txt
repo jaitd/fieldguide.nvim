@@ -27,15 +27,16 @@ wait 45
 send what sets <lt>leader>gb, and which plugin does it come from?<CR>
 wait 45
 
-# 3. A question about this config's behaviour, answered from what is installed.
-send I want inline git blame — do I have anything for that, or what should I add?<CR>
-wait 50
+# 3. A plugin this config does not have. Nothing installed can answer it, so
+#    the answer comes from the index of the ecosystem instead.
+send I have no file explorer — what would you suggest, and why that one?<CR>
+wait 45
 
-# ...and then have it make the change. This is the part nothing else does:
-# the edit lands in the config, and a sandboxed headless boot of the edited
-# config is attached to it, so "it still starts" is checked rather than hoped.
-send yes please — enable it by default<CR>
-wait 60
+# 4. Back to what is installed, and this time it makes the change: the edit
+#    lands in the config, and a sandboxed boot of the edited config is
+#    attached to it, so "it still starts" is checked rather than hoped.
+send I want inline git blame on by default — can you set that up?<CR>
+wait 70
 
 # The file on the left, reloaded from disk, showing what was written.
 send <C-\><C-n>

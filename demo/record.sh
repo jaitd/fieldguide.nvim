@@ -14,9 +14,9 @@
 # your temp directory. No path of yours reaches the screen, including in the
 # answers, which quote the files they came from.
 #
-# It does talk to a model, through whichever provider pi is logged in to
-# (FIELDGUIDE_DEMO_PROVIDER and FIELDGUIDE_DEMO_MODEL override it), so the
-# words differ between takes. The script is repeatable; the answers are not.
+# It does talk to a model, through the provider named in demo/config/init.lua
+# and whatever credentials pi already has, so the words differ between takes.
+# The script is repeatable; the answers are not.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,13 +41,14 @@ done
 [ -n "$GIF" ] && ! command -v agg >/dev/null &&
   { echo "agg is not on PATH: cargo install --git https://github.com/asciinema/agg" >&2; exit 1; }
 
+# Nothing is behind the recorded pty to answer Nvim's startup queries, and the
+# unanswered one for 'background' greets the take with E1568. See :help
+# 'ttyfast'.
+export NVIM_NOTTYFAST=1
 export XDG_CONFIG_HOME="$PROFILE/config"
 export XDG_DATA_HOME="$PROFILE/data"
 export XDG_STATE_HOME="$PROFILE/state"
 export XDG_CACHE_HOME="$PROFILE/cache"
-# Unset by default: the demo installs the plugin from GitHub, so the take shows
-# what a user gets and the agent can read the plugin's docs in its own zone.
-if [ "${FIELDGUIDE_DEMO_LOCAL:-}" = "1" ]; then export FIELDGUIDE_DEMO_REPO="$REPO"; fi
 
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 # Copied in, not symlinked: the config tree is the agent's read/write zone, and
@@ -131,7 +132,7 @@ asciinema rec "$CAST" \
   --idle-time-limit 2 \
   --cols 120 --rows 32 \
   --title "fieldguide.nvim" \
-  --command "nvim --listen $SOCK '+e $XDG_CONFIG_HOME/nvim/init.lua'"
+  --command "nvim --listen $SOCK -c 'lua require(\"keycast\").setup()' '+e $XDG_CONFIG_HOME/nvim/init.lua'"
 
 wait "$DRIVER" || true
 
@@ -154,6 +155,6 @@ if [ -n "$GIF" ]; then
   # --last-frame-duration: a gif loops, and without a pause on the end the
   # last answer is gone before it can be read. Long enough to take in what is
   # on screen, short enough not to look like the recording has hung.
-  agg --font-size 20 --theme asciinema --last-frame-duration 8 "$CAST" "$HERE/fieldguide.gif"
+  agg --font-size 20 --theme asciinema --last-frame-duration 3 "$CAST" "$HERE/fieldguide.gif"
   echo "wrote $HERE/fieldguide.gif"
 fi
