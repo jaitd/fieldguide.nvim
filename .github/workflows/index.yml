@@ -7,8 +7,9 @@
 #
 # The expensive half is the blurbs, and it only runs for plugins that are new
 # or whose release moved since the last pass. That state lives in
-# tools/plugin-index/blurbs.json, committed back by this job, so a normal week
-# costs a few dozen model calls rather than a few thousand.
+# tools/plugin-index/blurbs.json, sent back by this job as a pull request —
+# main only takes reviewed changes — so a normal week costs a few dozen model
+# calls rather than a few thousand.
 
 name: plugin index
 
@@ -24,6 +25,12 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
+
+env:
+  # Where the blurb cache waits for review. One branch, not one per run, so a
+  # week nobody merged is folded into the next run instead of piling up.
+  CACHE_BRANCH: index/blurbs
 
 # Two runs would race on the cache commit and the release tag. Never cancel a
 # run in flight — it may already have spent model credits on blurbs that are
@@ -71,6 +78,19 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pi update --models
+
+      # The cache lands on main through a pull request (below) that may still
+      # be open when the next run starts. Build from its copy when it is, or
+      # the run pays again for every blurb main is still missing.
+      - name: Start from the cache awaiting review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(gh pr list --head "$CACHE_BRANCH" --state open --json number --jq length || echo 0)" != "0" ]; then
+            git fetch origin "$CACHE_BRANCH"
+            git show "FETCH_HEAD:tools/plugin-index/blurbs.json" > tools/plugin-index/blurbs.json
+            echo "took blurbs.json from the open pull request on $CACHE_BRANCH"
+          fi
 
       - name: Build
         env:
@@ -122,17 +142,26 @@ jobs:
             }
           '
 
-      - name: Commit the blurb cache
+      - name: Open a pull request with the blurb cache
         # Runs even when the gate above fails: the build writes the cache as
         # soon as the blurbs are done, and a rejected index is no reason to
         # pay for them again next week.
         if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # The cache is the expensive state and the audit trail: a blurb that
           # a poisoned repository talked the model into writing shows up here as
-          # a diff before it ever reaches a user.
-          if git diff --quiet -- tools/plugin-index/blurbs.json; then
+          # a diff before it ever reaches a user — and, since main is protected,
+          # before it is merged.
+          if git diff --quiet HEAD -- tools/plugin-index/blurbs.json; then
             echo "no new blurbs this run"
+            exit 0
+          fi
+          if git fetch origin "$CACHE_BRANCH" 2>/dev/null \
+             && git diff --quiet FETCH_HEAD -- tools/plugin-index/blurbs.json \
+             && [ "$(gh pr list --head "$CACHE_BRANCH" --state open --json number --jq length)" != "0" ]; then
+            echo "the open pull request already carries these blurbs"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
@@ -155,17 +184,32 @@ jobs:
           ')
           git add tools/plugin-index/blurbs.json
           git commit -m "$subject"
-          # The build takes the best part of an hour, and main moving under it
-          # is ordinary — a merge, or this job's own commit from a run that
-          # finished first. Only this job writes blurbs.json, so replaying the
-          # commit onto the new tip does not conflict; try a few times in case
-          # main moves again between the fetch and the push.
+          # A fresh commit on top of the main this run built from, replacing
+          # whatever the branch held: only this job writes blurbs.json, and the
+          # run started from the branch's copy, so nothing is lost. Squash
+          # merge folds it onto main however far main has moved since.
+          pushed=
           for attempt in 1 2 3; do
-            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            if git push --force origin "HEAD:refs/heads/$CACHE_BRANCH"; then pushed=1; break; fi
             sleep $((attempt * 5))
           done
-          echo "::error::could not push the blurb cache; it is attached to this run as blurbs-${{ github.run_id }}"
-          exit 1
+          if [ -z "$pushed" ]; then
+            echo "::error::could not push the blurb cache; it is attached to this run as blurbs-${{ github.run_id }}"
+            exit 1
+          fi
+          body="Blurbs written by the plugin index job in run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}.
+
+The same run publishes the index it built; this is the cache that keeps next week's run from paying for the same blurbs again. Review the diff for anything a repository talked the model into saying, then squash-merge. A week left unmerged is folded into the next run's pull request.
+
+The test workflow does not run here: pull requests opened with the job's own token do not trigger other workflows, and nothing outside the cache changes."
+          # Pull requests opened with the job's token do not start other
+          # workflows, which is fine: the ruleset requires a review, not a
+          # status check, and only the cache changes.
+          if [ "$(gh pr list --head "$CACHE_BRANCH" --state open --json number --jq length)" = "0" ]; then
+            gh pr create --head "$CACHE_BRANCH" --base "$GITHUB_REF_NAME" --title "$subject" --body "$body"
+          else
+            gh pr edit "$CACHE_BRANCH" --title "$subject" --body "$body"
+          fi
 
       - name: Publish
         env:
