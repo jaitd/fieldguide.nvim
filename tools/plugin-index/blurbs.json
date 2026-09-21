@@ -208,6 +208,22 @@
   ],
   "superseded_by": null
  },
+ "2KAbhishek/homegrown.nvim": {
+  "ref": "1.0.0",
+  "blurb": "A collection of modular utility commands for bracket navigation, color highlighting, autopairs, search and replace, code running, terminals, and file navigation.",
+  "category": "Utility",
+  "keywords": [
+   "utility",
+   "collection",
+   "autopairs",
+   "bracket navigation",
+   "search and replace",
+   "code runner",
+   "terminal",
+   "color highlighter"
+  ],
+  "superseded_by": null
+ },
  "2KAbhishek/pickme.nvim": {
   "ref": "1.0",
   "blurb": "Provides a single interface for calling many common pickers, dispatching to Telescope, fzf-lua, or Snacks as the backend.",
@@ -1621,18 +1637,18 @@
   "superseded_by": null
  },
  "algmyr/vcsigns.nvim": {
-  "ref": "0cf41ddd4bc4",
-  "blurb": "Shows version control diff signs in the sign column for git, jujutsu, and mercurial, with hunk navigation, hunk undo, inline diffs, folding, and side-by-side diff views.",
+  "ref": "7d7e9934f94a",
+  "blurb": "Shows version control diff signs in the sign gutter for jujutsu, git and mercurial, with hunk navigation, undo, folding and inline or side-by-side diff views.",
   "category": "Git",
   "keywords": [
-   "vcs signs",
-   "git signs",
-   "sign column",
+   "git",
+   "signs",
+   "signcolumn",
    "diff",
-   "hunk",
-   "git gutter",
+   "gutter",
    "jujutsu",
-   "mercurial"
+   "vcs",
+   "hunks"
   ],
   "superseded_by": null
  },
@@ -1682,18 +1698,18 @@
   "superseded_by": null
  },
  "Allaman/emoji.nvim": {
-  "ref": "v6.1.0",
-  "blurb": "Search for and insert emojis and kaomojis into the current buffer, with optional telescope, fzf-lua, and completion integrations.",
+  "ref": "v6.2.0",
+  "blurb": "Search for and insert emojis or kaomojis into the current buffer, with optional telescope, fzf-lua, and completion integrations.",
   "category": "Editing Support",
   "keywords": [
    "emoji",
    "kaomoji",
-   "insert emoji",
-   "unicode",
-   "telescope",
+   "insert",
+   "completion",
    "autocompletion",
-   "picker",
-   "search"
+   "telescope",
+   "fuzzy finder",
+   "unicode"
   ],
   "superseded_by": null
  },
@@ -2193,6 +2209,21 @@
    "usings",
    "dotnet",
    "scaffolding"
+  ],
+  "superseded_by": null
+ },
+ "angeljreyes/scratch-runner.nvim": {
+  "ref": "2e4d12af532f",
+  "blurb": "Runs code from snacks.scratch buffers, with built-in command mappings for many programming languages.",
+  "category": "Code Runner",
+  "keywords": [
+   "code runner",
+   "scratch buffer",
+   "run code",
+   "script runner",
+   "snacks.nvim",
+   "execute code",
+   "repl"
   ],
   "superseded_by": null
  },
@@ -4226,16 +4257,16 @@
   "superseded_by": null
  },
  "bluz71/nvim-linefly": {
-  "ref": "447dbb1dafd8",
-  "blurb": "Displays a configurable statusline showing git changes, diagnostics, LSP clients, search count, macro and spell status, with optional tabline and winbar support.",
+  "ref": "448660913df3",
+  "blurb": "Provides a Lua statusline for Neovim with optional tabline and winbar, showing git changes, diagnostics, LSP clients, and file info.",
   "category": "Statusline",
   "keywords": [
    "statusline",
-   "status bar",
    "tabline",
    "winbar",
-   "lua statusline",
-   "git status",
+   "lua",
+   "status bar",
+   "git branch",
    "diagnostics",
    "lsp status"
   ],
@@ -5638,6 +5669,21 @@
    "clojure development",
    "lisp",
    "async"
+  ],
+  "superseded_by": null
+ },
+ "clojure-vim/jazz.nvim": {
+  "ref": "4537586c70ae",
+  "blurb": "Adds interactive menus to the acid Clojure nREPL client for selecting connections, finding symbol usages, and navigating project symbols.",
+  "category": "Programming Languages Support",
+  "keywords": [
+   "clojure",
+   "clojure development",
+   "nrepl",
+   "interactive prompts",
+   "symbol navigation",
+   "find usages",
+   "acid extension"
   ],
   "superseded_by": null
  },
@@ -7588,18 +7634,18 @@
   "superseded_by": null
  },
  "dmtrKovalenko/fff": {
-  "ref": "0.10.7-nightly.914c91e",
-  "blurb": "File and content search picker for Neovim with typo-tolerant matching and frecency-ranked results.",
+  "ref": "0.11.1-nightly.e3f694a",
+  "blurb": "Fuzzy file finder and live grep picker for Neovim with typo-resistant matching, frecency ranking, and a background file watcher.",
   "category": "Fuzzy Finder",
   "keywords": [
-   "file search",
    "fuzzy finder",
-   "picker",
-   "grep",
+   "file search",
    "live grep",
-   "frecency",
+   "picker",
+   "fzf",
    "ripgrep",
-   "fzf alternative"
+   "frecency",
+   "telescope alternative"
   ],
   "superseded_by": null
  },
@@ -10304,6 +10350,20 @@
   ],
   "superseded_by": null
  },
+ "gbvillarinho/termcn": {
+  "ref": "dd33b65f6c02",
+  "blurb": "A React component library styled with a retro terminal look, built on top of shadcn/ui.",
+  "category": "Web Development",
+  "keywords": [
+   "react",
+   "components",
+   "shadcn",
+   "tailwind",
+   "ui",
+   "terminal"
+  ],
+  "superseded_by": null
+ },
  "gcanoxl/cloc.nvim": {
   "ref": "72b740f844d3",
   "blurb": "Counts lines of code in a project using cloc, gocloc, or tokei and exposes an API for displaying stats in Neovim.",
@@ -12663,6 +12723,21 @@
   ],
   "superseded_by": null
  },
+ "ivantokar/xmap.nvim": {
+  "ref": "v0.8.3",
+  "blurb": "Shows a side-panel minimap of the whole buffer with symbol and comment highlights and keyboard jump navigation.",
+  "category": "Scrolling",
+  "keywords": [
+   "minimap",
+   "code overview",
+   "navigation",
+   "scrollbar",
+   "treesitter",
+   "symbols",
+   "jump"
+  ],
+  "superseded_by": null
+ },
  "ja-he/heat.nvim": {
   "ref": "v0.3.2",
   "blurb": "Highlights timestamps in buffers by how recent they are, including git blame views, mapping hotness values to colors.",
@@ -13053,6 +13128,22 @@
    "diagnostics",
    "ron file",
    "type validation"
+  ],
+  "superseded_by": null
+ },
+ "JavaHello/java-deps.nvim": {
+  "ref": "d5c51f4f2ad7",
+  "blurb": "Shows a tree outline of Java project dependencies and jar packages inside Neovim using jdtls data.",
+  "category": "LSP",
+  "keywords": [
+   "java",
+   "dependencies",
+   "jar",
+   "outline",
+   "jdtls",
+   "symbols",
+   "project explorer",
+   "maven"
   ],
   "superseded_by": null
  },
@@ -15950,8 +16041,8 @@
   "superseded_by": null
  },
  "lazyverilog/LazyVerilog": {
-  "ref": "v2.0.1",
-  "blurb": "Provides SystemVerilog language server features for Neovim, including formatting, linting, completion, hover, navigation, and RTL code actions.",
+  "ref": "v2.1.0",
+  "blurb": "SystemVerilog language server for Neovim and VS Code providing formatting, linting, completion, navigation, and RTL code actions.",
   "category": "LSP",
   "keywords": [
    "systemverilog",
@@ -15959,8 +16050,8 @@
    "lsp",
    "language server",
    "rtl",
-   "autocompletion",
    "hdl",
+   "autocompletion",
    "linting"
   ],
   "superseded_by": null
@@ -20945,6 +21036,22 @@
   ],
   "superseded_by": null
  },
+ "Nitestack/infrastructure": {
+  "ref": "e15e15bd3c58",
+  "blurb": "Personal infrastructure as code repository managing NixOS, WSL, macOS, a homelab, and Cloudflare edge config with Nix and OpenTofu.",
+  "category": "Pre-made Configuration",
+  "keywords": [
+   "nix",
+   "nixos",
+   "dotfiles",
+   "home-manager",
+   "infrastructure as code",
+   "homelab",
+   "macos",
+   "wsl"
+  ],
+  "superseded_by": null
+ },
  "NitroVim/foldergen.nvim": {
   "ref": "89ad0d899f37",
   "blurb": "Generates real folders and empty files from tree-style text pasted into a Neovim buffer.",
@@ -22494,8 +22601,8 @@
   "superseded_by": null
  },
  "nvim-zh/awesome-nvim-conf": {
-  "ref": "68aa40cb6815",
-  "blurb": "A curated list of Neovim configurations shared by Chinese Neovim users, with a README table linking each config and its features.",
+  "ref": "9d28614828e3",
+  "blurb": "A curated list of Neovim configurations shared by Chinese Neovim users, with links to each config repository.",
   "category": "Pre-made Configuration",
   "keywords": [
    "neovim config",
@@ -25743,17 +25850,17 @@
   "superseded_by": null
  },
  "rizukirr/droid-nvim": {
-  "ref": "v0.1.1",
-  "blurb": "Build, run, and debug Android apps from Neovim with Gradle, adb, emulators, and Kotlin/Java/Groovy LSP support.",
+  "ref": "v0.1.3",
+  "blurb": "Build, run, and debug Android apps from Neovim with Gradle, adb, emulators, device mirroring, and Kotlin/Java/Groovy language server support.",
   "category": "Programming Languages Support",
   "keywords": [
    "android",
    "kotlin",
-   "java",
    "gradle",
    "adb",
-   "emulator",
    "lsp",
+   "emulator",
+   "java",
    "mobile development"
   ],
   "superseded_by": null
@@ -27118,18 +27225,17 @@
   "superseded_by": null
  },
  "semi710/nvix": {
-  "ref": "c9a2ad7467ab",
-  "blurb": "A modular Neovim configuration built with Nixvim and flake-parts, offered in bare, core, and full variants.",
+  "ref": "9949e0d4b4a1",
+  "blurb": "A modular Neovim configuration managed with Nixvim and Nix flakes, offered in bare, core, and full variants.",
   "category": "Pre-made Configuration",
   "keywords": [
+   "neovim configuration",
    "nix",
    "nixvim",
-   "neovim configuration",
+   "flakes",
    "dotfiles",
-   "flake",
-   "premade config",
    "nix flake",
-   "nvim distro"
+   "vim config"
   ],
   "superseded_by": null
  },
@@ -29743,6 +29849,20 @@
    "packages",
    "lazy.nvim alternative",
    "plugin update"
+  ],
+  "superseded_by": null
+ },
+ "thekylehuang/cole.nvim": {
+  "ref": "neovim-plugin",
+  "blurb": "A Neovim colorscheme inspired by stationery, ported from the Cole palette to Lua.",
+  "category": "Colorscheme",
+  "keywords": [
+   "colorscheme",
+   "theme",
+   "color scheme",
+   "cole",
+   "lua",
+   "stationery"
   ],
   "superseded_by": null
  },
@@ -32373,17 +32493,17 @@
   "superseded_by": null
  },
  "wurli/jet.ark": {
-  "ref": "8852d2a0b1c6",
-  "blurb": "Runs an interactive R console in Neovim and adds session-aware language features like completions, plots, and help lookup via the Ark kernel.",
+  "ref": "dc16a50005bc",
+  "blurb": "Runs an R console in Neovim through the Ark Jupyter kernel, with expression detection, session-aware LSP completions, plots, and help and variables panes.",
   "category": "Programming Languages Support",
   "keywords": [
-   "rstats",
-   "repl",
-   "console",
-   "jupyter",
    "ark",
-   "data science",
-   "lsp"
+   "jupyter",
+   "kernel",
+   "console",
+   "repl",
+   "lsp",
+   "data science"
   ],
   "superseded_by": null
  },
@@ -33260,33 +33380,33 @@
   "superseded_by": null
  },
  "yukimemi/futago.vim": {
-  "ref": "07ba3748979b",
-  "blurb": "Provides a Google Gemini chat interface inside Vim and Neovim, and can generate commit messages from staged git or jj diffs.",
+  "ref": "2ef15f8f4a7f",
+  "blurb": "Chat with Google Gemini inside Vim or Neovim, with helpers to draft git and jj commit messages.",
   "category": "AI",
   "keywords": [
    "ai",
    "gemini",
    "chat",
    "llm",
+   "git commit",
    "denops",
-   "commit message",
-   "git"
+   "vim"
   ],
   "superseded_by": null
  },
  "yukimemi/rvpm": {
-  "ref": "v3.49.0",
-  "blurb": "A standalone command-line plugin manager for Neovim that installs, lazy-loads, and manages plugins via a TOML config with a precompiled Lua loader.",
+  "ref": "v3.51.2",
+  "blurb": "A CLI plugin manager for Neovim that installs and loads plugins from a TOML config, with parallel cloning, lazy-loading, and a pre-compiled loader.",
   "category": "Plugin Manager",
   "keywords": [
    "plugin manager",
-   "plugin management",
+   "neovim",
    "lazy loading",
-   "lazy-loading",
    "cli",
    "toml",
+   "rust",
    "package manager",
-   "loader"
+   "plugin installer"
   ],
   "superseded_by": null
  },
@@ -33442,18 +33562,17 @@
   "superseded_by": null
  },
  "zanglg/nova.nvim": {
-  "ref": "ae7f94adc983",
-  "blurb": "A true-color colorscheme for Neovim with independently tuned dark and light palettes and three intensity variants.",
+  "ref": "a0127c17328f",
+  "blurb": "A true-color Neovim colorscheme with independently tuned dark and light palettes, three intensity variants, and plugin integrations.",
   "category": "Colorscheme",
   "keywords": [
    "colorscheme",
    "theme",
-   "dark",
-   "light",
-   "true-color",
    "color scheme",
-   "lua",
-   "highlight"
+   "dark mode",
+   "light mode",
+   "true color",
+   "lua"
   ],
   "superseded_by": null
  },
@@ -33489,16 +33608,16 @@
   "superseded_by": null
  },
  "zaucy/mcos.nvim": {
-  "ref": "2cd208940c1e",
-  "blurb": "Adds a command that creates multiple cursors on every match of a typed pattern within a visual selection, with a live preview as you type.",
+  "ref": "323f29e00b2a",
+  "blurb": "Adds a command that places Neovim's native multicursors on a selection, with a live preview while you type the pattern.",
   "category": "Editing Support",
   "keywords": [
    "multicursor",
-   "multiple cursors",
-   "select",
-   "visual selection",
+   "multi-cursor",
+   "selection",
    "editing",
-   "preview"
+   "preview",
+   "cursor"
   ],
   "superseded_by": null
  },
