@@ -208,6 +208,22 @@
   ],
   "superseded_by": null
  },
+ "2giosangmitom/sqmeow.nvim": {
+  "ref": "v2.3.0",
+  "blurb": "Connect to databases and run SQL queries from Neovim, with a schema browser, editable result grids, and query history.",
+  "category": "Database",
+  "keywords": [
+   "database",
+   "sql",
+   "postgres",
+   "mysql",
+   "sqlite",
+   "query",
+   "database client",
+   "db"
+  ],
+  "superseded_by": null
+ },
  "2KAbhishek/homegrown.nvim": {
   "ref": "1.0.0",
   "blurb": "A collection of modular utility commands for bracket navigation, color highlighting, autopairs, search and replace, code running, terminals, and file navigation.",
@@ -1167,16 +1183,18 @@
   "superseded_by": null
  },
  "ahloiscreamo/Illit": {
-  "ref": "3156f64133cd",
-  "blurb": "A personal Artix Linux dotfiles collection configuring i3wm, terminal tools, and editors around the Rosé Pine color scheme.",
+  "ref": "42252081b8cb",
+  "blurb": "Personal Artix Linux dotfiles built around i3wm and the Rosé Pine colorscheme, with matching configs for terminals, bars, and CLI tools.",
   "category": "Pre-made Configuration",
   "keywords": [
    "dotfiles",
    "i3wm",
-   "rose pine",
    "artix linux",
-   "ricing",
-   "configuration"
+   "rose pine",
+   "rice",
+   "window manager",
+   "unixporn",
+   "config"
   ],
   "superseded_by": null
  },
@@ -2091,6 +2109,20 @@
   ],
   "superseded_by": null
  },
+ "Andr3xDev/nuydeck": {
+  "ref": "1.1",
+  "blurb": "Arch-based Hyprland dotfiles built around the Abysal color scheme, including a QuickShell status bar and Neovim setup.",
+  "category": "Pre-made Configuration",
+  "keywords": [
+   "dotfiles",
+   "hyprland",
+   "arch",
+   "quickshell",
+   "rice",
+   "window manager"
+  ],
+  "superseded_by": null
+ },
  "AndreM222/copilot-lualine": {
   "ref": "222e90bd8dcd",
   "blurb": "Shows GitHub Copilot's status as an icon in the lualine statusline, indicating whether suggestions are enabled, sleeping, disabled, loading, or erroring.",
@@ -2713,18 +2745,18 @@
   "superseded_by": null
  },
  "arne314/typstar": {
-  "ref": "v1.6.0",
-  "blurb": "Provides Typst note-taking snippets, Excalidraw and Rnote drawing integration, and standalone Anki flashcard export from Neovim.",
+  "ref": "v1.6.1",
+  "blurb": "Neovim plugin for taking mathematical notes in Typst with autosnippets, Excalidraw and Rnote drawing integration, and Anki flashcard export.",
   "category": "Note Taking",
   "keywords": [
    "typst",
    "snippets",
+   "autosnippets",
+   "luasnip",
    "anki",
    "flashcards",
    "excalidraw",
-   "rnote",
-   "autosnippets",
-   "note taking"
+   "rnote"
   ],
   "superseded_by": null
  },
@@ -3354,18 +3386,18 @@
   "superseded_by": null
  },
  "avante-corp/avante.nvim": {
-  "ref": "v0.2.3",
-  "blurb": "Provides an AI chat sidebar that answers questions about your code and applies suggested edits directly to the current file or selection.",
+  "ref": "v0.4.0",
+  "blurb": "Provides an AI chat sidebar for Neovim that answers questions about your code and can apply suggested edits directly to source files.",
   "category": "AI",
   "keywords": [
    "ai",
-   "chat",
-   "cursor",
+   "chatgpt",
    "copilot",
-   "code assistant",
+   "code assistance",
    "llm",
-   "openai",
-   "anthropic"
+   "cursor",
+   "code editing",
+   "agent"
   ],
   "superseded_by": null
  },
@@ -4181,16 +4213,16 @@
   "superseded_by": null
  },
  "blazkowolf/gruber-darker.nvim": {
-  "ref": "50fa4e583099",
-  "blurb": "Provides a dark Neovim color scheme, ported to Lua, with configurable bold, italic, and underline styling options.",
+  "ref": "35cb97959ef0",
+  "blurb": "A dark Neovim color scheme ported from the Gruber Darker theme, with configurable bold, italic, underline, and inversion options.",
   "category": "Colorscheme",
   "keywords": [
    "colorscheme",
    "color scheme",
    "theme",
-   "gruber dark",
+   "gruber darker",
    "dark theme",
-   "lua colorscheme"
+   "syntax highlighting"
   ],
   "superseded_by": null
  },
@@ -5368,18 +5400,18 @@
   "superseded_by": null
  },
  "ChmaraX/herdr-nvim": {
-  "ref": "v1.0.1",
-  "blurb": "Adds code annotations you can send to AI agents in a herdr workspace, plus a sidebar file picker showing recently touched files.",
+  "ref": "v1.1.0",
+  "blurb": "Adds a persistent Neovim sidebar with a fuzzy file picker and code annotations that you can send to coding agents in your workspace.",
   "category": "AI",
   "keywords": [
-   "ai agent",
-   "annotations",
-   "code review comments",
+   "agent",
+   "annotation",
+   "code review",
    "sidebar",
    "fuzzy finder",
-   "file picker",
-   "herdr",
-   "agent integration"
+   "claude",
+   "codex",
+   "workflow"
   ],
   "superseded_by": null
  },
@@ -7091,17 +7123,18 @@
   "superseded_by": null
  },
  "delphinus/md-render.nvim": {
-  "ref": "v3.10.0",
-  "blurb": "Renders raw Markdown as highlighted, interactive content inside Neovim, with tables, callouts, images, video, and Mermaid diagrams in floating windows or a pager.",
+  "ref": "v3.10.3",
+  "blurb": "Renders Markdown files inside Neovim with highlighted inline formatting, tables, callouts, code blocks, images, video, and Mermaid or PlantUML diagrams.",
   "category": "Markdown and LaTeX",
   "keywords": [
    "markdown",
-   "markdown renderer",
-   "preview",
-   "live preview",
+   "markdown preview",
+   "renderer",
+   "markdown viewer",
    "mermaid",
-   "cjk",
-   "pager"
+   "plantuml",
+   "inline images",
+   "markserv"
   ],
   "superseded_by": null
  },
@@ -7634,18 +7667,18 @@
   "superseded_by": null
  },
  "dmtrKovalenko/fff": {
-  "ref": "0.11.1-nightly.e3f694a",
-  "blurb": "Fuzzy file finder and live grep picker for Neovim with typo-resistant matching, frecency ranking, and a background file watcher.",
+  "ref": "0.11.1-nightly.89c1927",
+  "blurb": "A file picker and live grep tool for Neovim with typo-tolerant, frecency-ranked fuzzy search over paths and file contents.",
   "category": "Fuzzy Finder",
   "keywords": [
    "fuzzy finder",
    "file search",
-   "live grep",
    "picker",
-   "fzf",
-   "ripgrep",
+   "grep",
+   "live grep",
    "frecency",
-   "telescope alternative"
+   "telescope alternative",
+   "file finder"
   ],
   "superseded_by": null
  },
@@ -7767,6 +7800,51 @@
    "latexdiff",
    "typesetting",
    "preview"
+  ],
+  "superseded_by": null
+ },
+ "dont-be-evil-company/bafa.nvim": {
+  "ref": "v2.0.0",
+  "blurb": "Switch between open buffers and delete them from a floating window, with changes applied only when you commit a selection.",
+  "category": "Buffers",
+  "keywords": [
+   "buffer",
+   "buffer management",
+   "bufexplorer",
+   "switching buffers",
+   "buffer list",
+   "floating window",
+   "navigation"
+  ],
+  "superseded_by": null
+ },
+ "dont-be-evil-company/kikao.nvim": {
+  "ref": "v4.0.0",
+  "blurb": "Saves and restores your Neovim window layout and open buffers per project when you quit and reopen the editor.",
+  "category": "Session",
+  "keywords": [
+   "session",
+   "session management",
+   "workspace",
+   "save session",
+   "restore session",
+   "project",
+   "buffer layout"
+  ],
+  "superseded_by": null
+ },
+ "dont-be-evil-company/snap.nvim": {
+  "ref": "v1.5.0",
+  "blurb": "Captures screenshots of selected text or the whole Neovim window, rendering them with your current colorscheme and font settings.",
+  "category": "Utility",
+  "keywords": [
+   "screenshot",
+   "image capture",
+   "code screenshot",
+   "share code",
+   "colorscheme",
+   "export",
+   "png"
   ],
   "superseded_by": null
  },
@@ -9388,6 +9466,22 @@
   ],
   "superseded_by": null
  },
+ "Fau818/fade.nvim": {
+  "ref": "v0.1.0",
+  "blurb": "Dims unused code and inline completion previews by mixing each token's own color toward the background, preserving syntax highlighting instead of flat gray.",
+  "category": "Color",
+  "keywords": [
+   "dim",
+   "fade",
+   "unused code",
+   "dead code",
+   "ghost text",
+   "copilot",
+   "blink.cmp",
+   "syntax colors"
+  ],
+  "superseded_by": null
+ },
  "fbuchlak/cmp-symfony-router": {
   "ref": "a64dc1439414",
   "blurb": "Provides Symfony route names as a completion source for nvim-cmp in PHP and Twig files.",
@@ -10231,17 +10325,17 @@
   "superseded_by": null
  },
  "g0t4/zeta.nvim": {
-  "ref": "d99b5c31e88d",
-  "blurb": "Provides inline AI code predictions in Neovim by connecting to Zed's Zeta model through a local or remote prediction server.",
-  "category": "AI",
+  "ref": "cdf165249f7f",
+  "blurb": "Uses Zed's Zeta prediction model to suggest edits while editing in Neovim.",
+  "category": "Completion",
   "keywords": [
    "ai",
-   "code completion",
+   "prediction",
    "autocompletion",
-   "predictions",
-   "inline suggestions",
+   "code completion",
+   "zed",
    "zeta",
-   "zed"
+   "edit prediction"
   ],
   "superseded_by": null
  },
@@ -11093,16 +11187,17 @@
   "superseded_by": null
  },
  "hamidi-dev/kaleidosearch.nvim": {
-  "ref": "6ed6eecc1cb3",
-  "blurb": "Highlights multiple search terms in different colors so you can tell them apart on screen.",
+  "ref": "5c98ca76d923",
+  "blurb": "Highlights multiple search terms in distinct colors so you can visually track each match while searching in Neovim.",
   "category": "Search",
   "keywords": [
    "search",
    "highlight",
    "colorize",
    "multiple search terms",
+   "search highlighting",
    "visual tracking",
-   "search highlighting"
+   "matches"
   ],
   "superseded_by": null
  },
@@ -11925,8 +12020,8 @@
   "superseded_by": null
  },
  "huggingface/llm.nvim": {
-  "ref": "c7fdccf64375",
-  "blurb": "Provides ghost-text code completion in Neovim by sending prompts to LLM backends such as Hugging Face, Ollama, or OpenAI-compatible endpoints.",
+  "ref": "fba54982924b",
+  "blurb": "Provides ghost-text code completion in Neovim using large language models via a configurable HTTP backend.",
   "category": "Completion",
   "keywords": [
    "llm",
@@ -12360,33 +12455,31 @@
   "superseded_by": null
  },
  "Imngzx/jisho.nvim": {
-  "ref": "8a525c91044b",
-  "blurb": "Looks up Japanese words through the Jisho.org dictionary and shows entries in a floating window, with caching and search history.",
-  "category": "Language",
+  "ref": "6a48a511f2f7",
+  "blurb": "Looks up Japanese words and selections in an online dictionary and shows the definitions in a Neovim window.",
+  "category": "External Resource",
   "keywords": [
    "japanese",
    "dictionary",
-   "jisho",
-   "translation",
    "lookup",
+   "translation",
+   "jisho",
    "language learning",
-   "definitions",
-   "words"
+   "definitions"
   ],
   "superseded_by": null
  },
  "Imngzx/resonance.nvim": {
-  "ref": "19f2796b8248",
-  "blurb": "Manages Neovim plugins using the native vim.pack API with lazy loading, build hooks, and a browsable update UI.",
+  "ref": "1922ec449650",
+  "blurb": "A plugin manager built on Neovim's native vim.pack that lazily loads plugins on events, commands, keymaps, or filetypes.",
   "category": "Plugin Manager",
   "keywords": [
    "plugin manager",
    "vim.pack",
    "lazy loading",
+   "lazy loader",
    "package manager",
-   "plugin browser",
-   "plugin updater",
-   "lazy loader"
+   "neovim 0.13"
   ],
   "superseded_by": null
  },
@@ -13053,6 +13146,22 @@
   ],
   "superseded_by": null
  },
+ "JarnDev/autodap.nvim": {
+  "ref": "v0.1.0",
+  "blurb": "Zero-config debugger setup for Neovim that detects your project and generates nvim-dap launch configurations for Node, Python, and C/C++.",
+  "category": "Debugging",
+  "keywords": [
+   "debugger",
+   "dap",
+   "debug adapter protocol",
+   "nvim-dap",
+   "breakpoints",
+   "node",
+   "python",
+   "c++"
+  ],
+  "superseded_by": null
+ },
  "Jarred-Sumner/git-peek": {
   "ref": "1.3.18",
   "blurb": "Preview a remote Git repository or GitHub file and pull request in your local text editor without cloning it.",
@@ -13148,18 +13257,17 @@
   "superseded_by": null
  },
  "JavaHello/spring-boot.nvim": {
-  "ref": "eea95b752bce",
-  "blurb": "Integrates the Spring Boot language server into Neovim to find beans and web endpoints, complete application.properties and YAML files, and provide code actions for Java projects.",
+  "ref": "9880be48170a",
+  "blurb": "Adds Spring Boot language server support to Neovim, enabling bean and endpoint lookup, config file completion, and Spring annotation code actions for Java projects.",
   "category": "LSP",
   "keywords": [
    "spring boot",
    "java",
    "jdtls",
-   "language server",
    "lsp",
-   "bean",
-   "endpoints",
-   "completion"
+   "language server",
+   "spring annotations",
+   "application.yml"
   ],
   "superseded_by": null
  },
@@ -13391,33 +13499,32 @@
   "superseded_by": null
  },
  "jecaro/fugitive-difftool.nvim": {
-  "ref": "c31529f53479",
-  "blurb": "Browse and jump between changes from a Fugitive difftool comparison of two git revisions using the quickfix list, useful for code review.",
+  "ref": "8de989a6fa57",
+  "blurb": "Browses the quickfix list of files and hunks produced by Fugitive's difftool command, letting you jump between changed revisions while reviewing code.",
   "category": "Git",
   "keywords": [
    "git",
-   "diff",
+   "fugitive",
    "difftool",
    "quickfix",
-   "fugitive",
+   "diff",
    "code review",
-   "branch comparison",
-   "revisions"
+   "branch comparison"
   ],
   "superseded_by": null
  },
  "jecaro/ghcid-error-file.nvim": {
-  "ref": "59c001551153",
-  "blurb": "Parses the error file produced by ghcid or ghciwatch and fills Neovim's quickfix list with the Haskell errors found.",
+  "ref": "5d798f529231",
+  "blurb": "Parses the error file produced by ghcid or ghciwatch and fills Neovim's quickfix list with Haskell compile errors.",
   "category": "Quickfix",
   "keywords": [
    "haskell",
    "ghcid",
    "ghciwatch",
    "quickfix",
-   "compiler errors",
    "error file",
-   "ghci"
+   "compile errors",
+   "compilation"
   ],
   "superseded_by": null
  },
@@ -13663,18 +13770,18 @@
   "superseded_by": null
  },
  "JFryy/systemd-lsp": {
-  "ref": "v2026.08.03",
-  "blurb": "Language server for systemd unit and Podman quadlet files, offering diagnostics, context-aware autocompletion, hover documentation, and formatting.",
+  "ref": "v2026.09.28",
+  "blurb": "Language server for systemd unit files that provides syntax analysis, diagnostics, context-aware autocompletion, hover documentation, and formatting.",
   "category": "LSP",
   "keywords": [
    "systemd",
    "lsp",
    "language server",
-   "autocompletion",
-   "diagnostics",
    "unit files",
-   "podman",
-   "quadlet"
+   "diagnostics",
+   "autocompletion",
+   "systemd units",
+   "podman quadlet"
   ],
   "superseded_by": null
  },
@@ -13741,17 +13848,16 @@
   "superseded_by": null
  },
  "jiaoshijie/undotree": {
-  "ref": "5721c3fb3876",
-  "blurb": "Visualizes Neovim's internal undo tree in a panel, with diff preview between the current state and the state under the cursor.",
-  "category": "Editing Support",
+  "ref": "8b52517999b1",
+  "blurb": "Visualizes Neovim's undo tree in a panel, letting you browse, preview diffs, and jump to any earlier undo state.",
+  "category": "Utility",
   "keywords": [
+   "undo",
    "undotree",
    "undo history",
-   "undo",
-   "redo",
-   "history",
+   "undo tree visualizer",
    "diff preview",
-   "undo tree"
+   "history browsing"
   ],
   "superseded_by": null
  },
@@ -15266,8 +15372,8 @@
   "superseded_by": null
  },
  "kjuq/skkelua.nvim": {
-  "ref": "d3a1185ab97f",
-  "blurb": "Provides an SKK Japanese input method for Neovim, with dictionary lookup, kana conversion, in-process completion suggestions, and a mode indicator.",
+  "ref": "b1e8d46918fe",
+  "blurb": "Provides a pure-Lua SKK Japanese input method for Neovim with conversion, user dictionaries, and a mode indicator.",
   "category": "Editing Support",
   "keywords": [
    "skk",
@@ -15275,8 +15381,8 @@
    "ime",
    "input method",
    "henkan",
-   "autocompletion",
-   "kana"
+   "kana",
+   "romaji"
   ],
   "superseded_by": null
  },
@@ -17515,17 +17621,17 @@
   "superseded_by": null
  },
  "lwcrafts/nui-diagnostic.nvim": {
-  "ref": "a72703c54191",
-  "blurb": "Jumps between diagnostics and shows the current diagnostic along with available LSP code actions in floating popups.",
+  "ref": "0.2.0",
+  "blurb": "Jumps between LSP diagnostics and shows the current diagnostic with available code actions in floating popups.",
   "category": "Diagnostics",
   "keywords": [
    "diagnostics",
    "lsp",
    "code actions",
-   "code-action",
+   "quickfix",
    "popup",
-   "jump",
-   "quickfix"
+   "nui.nvim",
+   "error navigation"
   ],
   "superseded_by": null
  },
@@ -17995,6 +18101,22 @@
    "typescript testing",
    "unit tests",
    "testing"
+  ],
+  "superseded_by": null
+ },
+ "mariocesar/beside.nvim": {
+  "ref": "v0.2.1",
+  "blurb": "Renders the document you are editing in a split beside it using an external terminal renderer, with synchronized scrolling and live re-rendering as you type.",
+  "category": "Live Preview",
+  "keywords": [
+   "markdown preview",
+   "live preview",
+   "realtime rendering",
+   "pandoc",
+   "glow",
+   "split preview",
+   "document preview",
+   "asciidoc"
   ],
   "superseded_by": null
  },
@@ -18665,6 +18787,22 @@
   ],
   "superseded_by": null
  },
+ "meowshed/meow.review.nvim": {
+  "ref": "v0.2.2",
+  "blurb": "Annotate code with typed review comments in Neovim and export them as Markdown for AI agents to act on.",
+  "category": "AI",
+  "keywords": [
+   "code review",
+   "annotations",
+   "ai",
+   "comments",
+   "markdown export",
+   "ai agent",
+   "codecompanion",
+   "avante"
+  ],
+  "superseded_by": null
+ },
  "Mestane/blink-cmp-deps": {
   "ref": "v0.5.0",
   "blurb": "Completes Maven and Gradle dependency coordinates in build files, searching local repositories and Maven Central by library name.",
@@ -19288,8 +19426,8 @@
   "superseded_by": null
  },
  "mistweaverco/nvpm-client": {
-  "ref": "v3.11.0",
-  "blurb": "Installs and manages Tree-sitter parsers, LSP and DAP servers, linters, and formatters from multiple package sources via a CLI.",
+  "ref": "v3.11.1",
+  "blurb": "A command line package manager for installing and updating Tree-sitter parsers, LSP servers, DAP servers, linters, and formatters.",
   "category": "Dependency Management",
   "keywords": [
    "package manager",
@@ -19298,8 +19436,8 @@
    "dap",
    "formatter",
    "linter",
-   "language server",
-   "cli"
+   "cli",
+   "nvpm"
   ],
   "superseded_by": null
  },
@@ -19426,16 +19564,14 @@
   "superseded_by": null
  },
  "MoaidHathot/Neovim-Moaid": {
-  "ref": "ab7cfb9f78b2",
-  "blurb": "A ready-made Neovim configuration for Windows and Linux aimed at .NET and C# development.",
+  "ref": "ad3ef6043842",
+  "blurb": "A Neovim configuration for Windows and Linux with .NET support built in.",
   "category": "Pre-made Configuration",
   "keywords": [
    "neovim config",
    "dotfiles",
+   "pre-made configuration",
    "dotnet",
-   "c#",
-   "nvim configuration",
-   "distro",
    "windows",
    "linux"
   ],
@@ -19520,17 +19656,17 @@
   "superseded_by": null
  },
  "monok-robeto/nvim.sfx_player": {
-  "ref": "da103b21523c",
-  "blurb": "Plays audio files like mp3, wav, flac, and ogg in a floating window with a colored timeline and keyboard controls.",
+  "ref": "360145045f75",
+  "blurb": "Plays audio files from your file explorer in a floating popup with track info, metadata, and a keyboard-controlled timeline.",
   "category": "Media",
   "keywords": [
-   "audio player",
+   "audio",
    "music player",
    "mpv",
-   "sound",
-   "playlist",
-   "nvim-tree",
-   "media"
+   "media",
+   "audio player",
+   "playback",
+   "sound"
   ],
   "superseded_by": null
  },
@@ -19596,17 +19732,17 @@
   "superseded_by": null
  },
  "mp248/clingy.nvim": {
-  "ref": "7cf14fd205f9",
-  "blurb": "Displays line numbers that are pushed right to sit next to the indentation of each line rather than in a fixed column.",
+  "ref": "deae8140f1b0",
+  "blurb": "Renders line numbers indented to align with the leading whitespace of each line, instead of flush against the window edge.",
   "category": "UI",
   "keywords": [
    "line numbers",
+   "linenr",
+   "indent",
    "gutter",
-   "indentation",
-   "relative numbers",
-   "statuscolumn",
-   "line number alignment",
-   "cursorline"
+   "sign column",
+   "number column",
+   "relative numbers"
   ],
   "superseded_by": null
  },
@@ -20793,16 +20929,17 @@
   "superseded_by": null
  },
  "NicholasMata/sqlserver.nvim": {
-  "ref": "v1.0.0-rc.4",
-  "blurb": "Connect Neovim to SQL Server to run T-SQL queries, browse database objects, and view or export results.",
+  "ref": "v1.0.0-rc.5",
+  "blurb": "Connect to SQL Server from Neovim to run T-SQL queries, explore database objects, and inspect results in dedicated buffers.",
   "category": "Database",
   "keywords": [
    "sql server",
+   "sql",
+   "database",
    "mssql",
-   "tsql",
+   "query",
    "database client",
-   "sql query",
-   "query runner",
+   "tsql",
    "lsp"
   ],
   "superseded_by": null
@@ -22601,16 +22738,17 @@
   "superseded_by": null
  },
  "nvim-zh/awesome-nvim-conf": {
-  "ref": "9d28614828e3",
-  "blurb": "A curated list of Neovim configurations shared by Chinese Neovim users, with links to each config repository.",
+  "ref": "3e319cc99a26",
+  "blurb": "A curated list of Neovim configurations shared by Chinese users, with links, descriptions, and star counts.",
   "category": "Pre-made Configuration",
   "keywords": [
    "neovim config",
-   "nvim configuration",
    "dotfiles",
    "awesome list",
+   "nvim configuration",
+   "chinese neovim",
    "premade config",
-   "chinese nvim"
+   "nvim setup"
   ],
   "superseded_by": null
  },
@@ -23288,18 +23426,17 @@
   "superseded_by": null
  },
  "oxidescheme/nvim": {
-  "ref": "a69071f5b68c",
-  "blurb": "A dark Neovim color scheme with Tree-sitter and LSP highlighting, plus a lualine theme and customizable styles.",
+  "ref": "824a002520e9",
+  "blurb": "A dark Neovim colorscheme with Treesitter, LSP semantic highlighting, and a lualine theme, configured through Lua.",
   "category": "Colorscheme",
   "keywords": [
    "colorscheme",
    "theme",
-   "color scheme",
    "dark theme",
-   "syntax highlighting",
    "treesitter",
    "lsp",
-   "lualine"
+   "lualine",
+   "highlighting"
   ],
   "superseded_by": null
  },
@@ -25123,17 +25260,18 @@
   "superseded_by": null
  },
  "rauls-kjarners/omp.nvim": {
-  "ref": "v1.1.7",
-  "blurb": "Sends your current file, cursor line, and visual selection from Neovim to an active Oh My Pi coding agent terminal session so the AI knows what you are looking at.",
+  "ref": "v2.0.0",
+  "blurb": "Syncs the active file, cursor line, and visual selection from Neovim to an Oh My Pi terminal session so the AI agent knows what you are looking at.",
   "category": "AI",
   "keywords": [
    "ai",
-   "coding agent",
+   "agent",
+   "ai agent",
    "context sharing",
+   "cursor tracking",
    "terminal integration",
-   "omp",
    "oh my pi",
-   "cursor tracking"
+   "omp"
   ],
   "superseded_by": null
  },
@@ -25532,18 +25670,34 @@
   ],
   "superseded_by": null
  },
+ "reybits/scratch.nvim": {
+  "ref": "v0.5.0",
+  "blurb": "Keeps temporary, per-project, and global notes plus lightweight issues in one floating Neovim window backed by ordinary markdown buffers.",
+  "category": "Note Taking",
+  "keywords": [
+   "notes",
+   "scratchpad",
+   "todo",
+   "issue tracker",
+   "task management",
+   "markdown",
+   "floating window",
+   "project notes"
+  ],
+  "superseded_by": null
+ },
  "reybits/ts-forge.nvim": {
-  "ref": "f915063a0da7",
-  "blurb": "Installs and updates tree-sitter parsers and their query files for Neovim, compiling grammars asynchronously and skipping parsers bundled with Neovim.",
+  "ref": "37f1199a22bf",
+  "blurb": "Installs and updates tree-sitter parsers and queries for Neovim, compiling grammars from upstream repos with git and the tree-sitter CLI.",
   "category": "Tree-sitter Based",
   "keywords": [
    "tree-sitter",
-   "parser manager",
    "treesitter",
-   "parser install",
+   "parser manager",
+   "parser installer",
    "tsinstall",
    "grammar",
-   "syntax highlighting"
+   "syntax"
   ],
   "superseded_by": null
  },
@@ -26842,6 +26996,22 @@
   ],
   "superseded_by": null
  },
+ "sammaji/markdown-preview.nvim": {
+  "ref": "v0.2.0",
+  "blurb": "Previews Markdown files in a browser with live updates and synchronised scrolling, supporting math, diagrams, and themes.",
+  "category": "Live Preview",
+  "keywords": [
+   "markdown",
+   "preview",
+   "live preview",
+   "browser",
+   "synchronised scrolling",
+   "katex",
+   "mermaid",
+   "markdown preview"
+  ],
+  "superseded_by": null
+ },
  "samsze0/websocket.nvim": {
   "ref": "0.1.0",
   "blurb": "Provides WebSocket client and server APIs inside Neovim, letting Lua code connect to or host WebSocket endpoints and handle messages through callbacks.",
@@ -26872,18 +27042,17 @@
   "superseded_by": null
  },
  "sand4rt/zen.nvim": {
-  "ref": "5fd4b1cc12b9",
-  "blurb": "Centers the main buffer and repositions side buffers to reduce neck strain and improve focus.",
+  "ref": "48b408bcd822",
+  "blurb": "Centers the main buffer and arranges side buffers to reduce neck strain and improve focus while editing.",
   "category": "UI",
   "keywords": [
    "zen mode",
    "zenmode",
-   "distraction free",
    "centered buffer",
+   "distraction free",
    "focus",
    "window layout",
-   "side buffer",
-   "no neck pain"
+   "ui"
   ],
   "superseded_by": null
  },
@@ -27225,17 +27394,17 @@
   "superseded_by": null
  },
  "semi710/nvix": {
-  "ref": "9949e0d4b4a1",
-  "blurb": "A modular Neovim configuration managed with Nixvim and Nix flakes, offered in bare, core, and full variants.",
+  "ref": "32285097c800",
+  "blurb": "A modular Nixvim-based Neovim configuration distributed as a flake, offering bare, core, and full variants or cherry-picked plugin modules.",
   "category": "Pre-made Configuration",
   "keywords": [
-   "neovim configuration",
-   "nix",
    "nixvim",
-   "flakes",
+   "nix",
+   "flake",
+   "neovim configuration",
+   "distro",
    "dotfiles",
-   "nix flake",
-   "vim config"
+   "home-manager"
   ],
   "superseded_by": null
  },
@@ -27440,18 +27609,18 @@
   "superseded_by": null
  },
  "sheng-tse/jupynvim": {
-  "ref": "v0.4.5",
-  "blurb": "Edit and run Jupyter notebooks in Neovim with real kernels, inline images, and LSP support, including over SSH on remote machines and clusters.",
+  "ref": "v0.4.6-beta.1",
+  "blurb": "Opens and edits Jupyter .ipynb notebooks in Neovim with real kernels, inline images, and LSP, including over SSH to remote machines or clusters.",
   "category": "Note Taking",
   "keywords": [
    "jupyter",
    "notebook",
    "ipynb",
-   "jupyter kernels",
-   "cells",
-   "remote ssh",
-   "data science",
-   "python"
+   "remote",
+   "ssh",
+   "kernel",
+   "hpc",
+   "jupyterlab"
   ],
   "superseded_by": null
  },
@@ -27723,6 +27892,21 @@
   ],
   "superseded_by": null
  },
+ "sirzif/blade.nvim": {
+  "ref": "v0.3.1",
+  "blurb": "A Blade Runner 2049 inspired dark colorscheme for Neovim with configurable palette, styles, and transparency.",
+  "category": "Colorscheme",
+  "keywords": [
+   "colorscheme",
+   "theme",
+   "color scheme",
+   "blade runner",
+   "dark theme",
+   "neovim colorscheme",
+   "syntax highlighting"
+  ],
+  "superseded_by": null
+ },
  "sirzif/tzfn.nvim": {
   "ref": "v0.2.3",
   "blurb": "A Neovim colorscheme with a Blade Runner 2049 inspired color palette, offering configurable styles and lualine support.",
@@ -27902,18 +28086,16 @@
   "superseded_by": null
  },
  "skylarmb/torchlight.nvim": {
-  "ref": "3347ef0164ef",
-  "blurb": "A dark Neovim colorscheme with three palettes and four contrast levels, derived from a Hokusai painting's low-blue palette.",
+  "ref": "1bd03f30601c",
+  "blurb": "A dark Neovim colorscheme with low-blue palettes, several contrast levels, and highlight groups for popular plugins.",
   "category": "Colorscheme",
   "keywords": [
    "colorscheme",
    "theme",
-   "dark",
-   "low blue",
-   "hokusai",
-   "palette",
-   "contrast",
-   "treesitter"
+   "dark theme",
+   "color scheme",
+   "treesitter",
+   "lualine"
   ],
   "superseded_by": null
  },
@@ -29033,6 +29215,22 @@
   ],
   "superseded_by": null
  },
+ "Sunrisepeak/mcpp-language-server": {
+  "ref": "v0.0.6",
+  "blurb": "Language server providing C++20/23 module semantics, navigation, and import completion across GCC, Clang, MSVC, and MinGW for Neovim and other editors.",
+  "category": "LSP",
+  "keywords": [
+   "c++",
+   "modules",
+   "language server",
+   "lsp",
+   "cpp20",
+   "import completion",
+   "clangd",
+   "mcppls"
+  ],
+  "superseded_by": null
+ },
  "supermaven-inc/supermaven-nvim": {
   "ref": "07d20fce48a5",
   "blurb": "Provides AI-powered inline code completions in Neovim, with optional nvim-cmp source integration.",
@@ -29148,6 +29346,22 @@
    "buffer",
    "split",
    "utility"
+  ],
+  "superseded_by": null
+ },
+ "swaits/turbo-debug.nvim": {
+  "ref": "v0.2.2",
+  "blurb": "Sets up a full debugger for Neovim with one config line, wiring nvim-dap, its UI, virtual text, and persistent breakpoints into a modal debug mode with single-key controls.",
+  "category": "Debugging",
+  "keywords": [
+   "debugger",
+   "dap",
+   "debug adapter protocol",
+   "breakpoints",
+   "variable inspection",
+   "debugging",
+   "nvim-dap",
+   "stepping"
   ],
   "superseded_by": null
  },
@@ -29944,18 +30158,18 @@
   "superseded_by": null
  },
  "TheThoughtagen/ignition-ide-plugins": {
-  "ref": "v1.3.1",
-  "blurb": "Adds Ignition SCADA development support to Neovim, including system API completions, hover docs, go-to-definition, diagnostics, and decoding embedded Python scripts from project JSON files.",
+  "ref": "v1.4.0",
+  "blurb": "Provides LSP-based completions, hover docs, go-to-definition and diagnostics for Ignition by Inductive Automation projects in Neovim.",
   "category": "LSP",
   "keywords": [
    "ignition",
    "inductive automation",
-   "scada",
    "lsp",
+   "completion",
    "autocompletion",
    "python",
    "jython",
-   "system api"
+   "perspective"
   ],
   "superseded_by": null
  },
@@ -30500,17 +30714,17 @@
   "superseded_by": null
  },
  "uhs-robert/color-chameleon.nvim": {
-  "ref": "v0.1.0",
-  "blurb": "Applies different colorschemes automatically based on conditions like working directory, environment variables, filetype, or custom functions.",
+  "ref": "v0.2.0",
+  "blurb": "Switches Neovim colorschemes automatically based on conditional rules like working directory, environment variables, and buffer properties.",
   "category": "Colorscheme Switchers",
   "keywords": [
    "colorscheme",
    "theme switcher",
-   "conditional colorscheme",
-   "automatic theme",
-   "colorscheme rules",
-   "context aware theme",
-   "environment based theme"
+   "colorscheme switcher",
+   "conditional",
+   "context-aware",
+   "background",
+   "directory"
   ],
   "superseded_by": null
  },
@@ -31317,17 +31531,17 @@
   "superseded_by": null
  },
  "vuki656/review.nvim": {
-  "ref": "17908cbdb498",
-  "blurb": "Review git diffs in a dedicated tab, attach comments to specific diff lines, and export them as markdown to an AI agent or clipboard.",
+  "ref": "6d7d8dde6956",
+  "blurb": "Browse git diffs in a dedicated tab, attach typed comments to specific lines, and export them as markdown to an AI agent or clipboard.",
   "category": "Git",
   "keywords": [
-   "code review",
    "git diff",
-   "diff review",
-   "comment",
+   "code review",
+   "diff viewer",
+   "comments",
+   "export markdown",
    "ai agent",
-   "markdown export",
-   "git"
+   "tmux"
   ],
   "superseded_by": null
  },
@@ -32507,6 +32721,22 @@
   ],
   "superseded_by": null
  },
+ "wurli/servery.nvim": {
+  "ref": "10be00380cc1",
+  "blurb": "Switch between running Neovim sessions in different directories, with a built-in picker or fuzzy finders like fzf-lua, Telescope, and mini.pick.",
+  "category": "Session",
+  "keywords": [
+   "session",
+   "session manager",
+   "fuzzy finder",
+   "picker",
+   "server",
+   "connect",
+   "detach",
+   "telescope"
+  ],
+  "superseded_by": null
+ },
  "wurli/urlpreview.nvim": {
   "ref": "0135be91c0dc",
   "blurb": "Shows a floating preview of a webpage's title and description when the cursor rests over a URL in a buffer.",
@@ -33380,33 +33610,33 @@
   "superseded_by": null
  },
  "yukimemi/futago.vim": {
-  "ref": "2ef15f8f4a7f",
-  "blurb": "Chat with Google Gemini inside Vim or Neovim, with helpers to draft git and jj commit messages.",
+  "ref": "ae780128ad91",
+  "blurb": "Chat with Google Gemini AI inside Vim or Neovim, and generate git or jj commit messages from staged diffs.",
   "category": "AI",
   "keywords": [
    "ai",
    "gemini",
    "chat",
    "llm",
-   "git commit",
+   "git commit message",
    "denops",
-   "vim"
+   "artificial intelligence"
   ],
   "superseded_by": null
  },
  "yukimemi/rvpm": {
-  "ref": "v3.51.2",
-  "blurb": "A CLI plugin manager for Neovim that installs and loads plugins from a TOML config, with parallel cloning, lazy-loading, and a pre-compiled loader.",
+  "ref": "v3.52.0",
+  "blurb": "Manages Neovim plugins from the command line with TOML config, parallel git clones, lazy loading, and a pre-compiled loader for fast startup.",
   "category": "Plugin Manager",
   "keywords": [
    "plugin manager",
    "neovim",
    "lazy loading",
-   "cli",
+   "lazy load",
    "toml",
+   "cli",
    "rust",
-   "package manager",
-   "plugin installer"
+   "package manager"
   ],
   "superseded_by": null
  },
