@@ -102,7 +102,9 @@ async function hook(name: string, event: Record<string, unknown>, signal?: Abort
 async function runHook(which: string, target: string | undefined): Promise<number> {
   if (!target) {
     process.stderr.write(`fieldguide: ${which} needs a path\n`);
-    return 1;
+    // A pre-write hook that cannot decide refuses: Claude Code reads any exit
+    // but 2 as a hook that failed without blocking, and writes anyway.
+    return which === "--before-write" ? 2 : 1;
   }
   const event = { toolName: "write", input: { path: target }, content: [], isError: false };
 
@@ -192,8 +194,15 @@ async function callTool(id: Id, params: Record<string, unknown>) {
 }
 
 function dispatch(message: Message) {
-  const { id, method, params = {} } = message;
+  const { id, method } = message;
+  // `?? {}` and not a destructuring default, which lets null through.
+  const params = message.params ?? {};
   const isRequest = id !== undefined && id !== null;
+
+  // A request without an id is a notification, and a notification is never
+  // answered. None of these has any use as one, and a tools/call has side
+  // effects, so they are dropped rather than run.
+  if (!isRequest && (method === "initialize" || method === "ping" || method?.startsWith("tools/"))) return;
 
   switch (method) {
     case "initialize": {

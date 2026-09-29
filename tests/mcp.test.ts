@@ -337,6 +337,17 @@ test("errors", async (t) => {
     assert.equal(res.error.code, -32601);
   });
 
+  await t.test("null params are read as none, not a crash", async () => {
+    // A destructuring default applies to undefined only; null used to reach
+    // `params.protocolVersion` and take the whole server down.
+    const init = await client.request("initialize", null as unknown as Json);
+    assert.match(init.result.protocolVersion, /^\d{4}-\d{2}-\d{2}$/);
+    const call = await client.request("tools/call", null as unknown as Json);
+    assert.equal(call.error.code, -32602);
+    client.notify("notifications/cancelled", null as unknown as Json);
+    assert.deepEqual((await client.request("ping")).result, {});
+  });
+
   await t.test("a garbled line is answered and survived", async () => {
     client.raw("{not json");
     await sleep(100);
@@ -344,6 +355,30 @@ test("errors", async (t) => {
     assert.ok(garbled, "expected a parse error response");
     assert.equal(garbled.id, null);
     assert.deepEqual((await client.request("ping")).result, {});
+  });
+});
+
+test("notifications", async (t) => {
+  // A stand-in for `nvim -l` that leaves a mark if it is ever run.
+  const mark = path.join(root, "ran.mark");
+  const fake = path.join(root, "marking-nvim");
+  await writeFile(fake, `#!/bin/sh\ntouch ${mark}\necho '{"ok":true,"result":{}}'\n`);
+  await chmod(fake, 0o755);
+
+  const client = new Client({ ...base, FIELDGUIDE_NVIM: fake });
+  t.after(() => client.kill());
+  await client.initialize();
+
+  await t.test("a request without an id runs nothing and is not answered", async () => {
+    const before = client.received.length;
+    for (const method of ["tools/call", "tools/list", "ping"]) {
+      client.notify(method, { name: "nvim_state", arguments: {} });
+    }
+    // A request after them, answered in order, shows the three were read.
+    await client.request("ping");
+    await sleep(200);
+    assert.equal(existsSync(mark), false, "a notification must not run a tool");
+    assert.equal(client.received.length, before + 1, JSON.stringify(client.received.slice(before)));
   });
 });
 
@@ -466,8 +501,16 @@ test("against a live editor", async (t) => {
     assert.match(outside.stderr, /outside fieldguide's zones/);
   });
 
-  await t.test("a hook with no path is a usage error", async () => {
+  await t.test("an --after-write with no path is a usage error", async () => {
     const res = await hookRun(["--after-write"], env, configRoot);
     assert.equal(res.code, 1);
+  });
+
+  // Claude Code reads any exit but 2 as a hook that failed *without* blocking,
+  // and runs the tool anyway. A pre-write hook that cannot decide must refuse.
+  await t.test("a --before-write with no path refuses, with exit 2", async () => {
+    const res = await hookRun(["--before-write"], env, configRoot);
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /needs a path/);
   });
 });
