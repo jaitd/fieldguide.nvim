@@ -1,8 +1,10 @@
 -- The sandboxes: bwrap on Linux, seatbelt (`sandbox-exec`) on macOS.
 --
--- `verify` boots the config in one, offline, and throws away everything it
--- wrote. Kept apart from the verb so the backend choice and the path discovery
--- (plugin dirs, stow link targets) can be shared.
+-- Two things are run inside one. `verify` boots the config offline and throws
+-- away everything it wrote; the agent itself, under any harness other than pi,
+-- runs with the config tree writable and nothing else of $HOME in reach. They
+-- share the backend choice and the path discovery (plugin dirs, stow link
+-- targets), and differ in what they bind and whether the network is there.
 
 local cfg = require("fieldguide.config")
 local util = require("fieldguide.util")
@@ -343,6 +345,267 @@ end
 ---@return table plan { argv: string[], env: table, probe: string, temp: string[]? }
 function M.verify_plan(which, config_dir)
   return (which == "seatbelt" and verify_seatbelt or verify_bwrap)(config_dir)
+end
+
+-- The agent sandbox.
+--
+-- Under pi the path gate lives in the extension, in front of every file tool.
+-- Other harnesses carry their own tools, and their hooks see arguments in
+-- shapes the gate would have to be taught one at a time: a Glob pattern
+-- holding `../`, a patch whose paths are inside its text, a shell command
+-- string. Taught one at a time is how a gate misses one. So the harness
+-- process runs in here, and the zones become what exists rather than what a
+-- hook decides to allow:
+--
+--   config tree        read/write   bound at its real path
+--   doc roots          read-only    lazy's plugin dir, $VIMRUNTIME
+--   fieldguide itself  read-only    the MCP server and the CLI its tools call
+--   the rest of $HOME  absent       a tmpfs, whatever the harness does
+--
+-- What is deliberately still possible, and why:
+--
+-- - The network. The harness has to reach its model provider, and bwrap has
+--   no allowlist by host: it is all of the network or none of it. What the
+--   network can carry out is bounded by what is readable in here, which is
+--   why that list is short.
+-- - Its own credentials. A harness cannot log in with a token it cannot read,
+--   so `needs()` binds them back. A prompt-injected agent can read that token.
+--   It cannot read anything else of yours.
+-- - Talking to this editor, over the one socket bound in. That is how the
+--   tools work at all; what reaches the editor through it is the closed verb
+--   table in api.lua, not arbitrary Lua.
+
+---Top-level system directories a binary needs to run at all. Allowlisted
+---rather than `--ro-bind / /` and subtracting, as `verify` does: verify runs a
+---config, but some harnesses hand the agent a shell, and a shell finds
+---whatever a subtraction forgot — other users' homes, /mnt, a stray readable
+---file in /tmp, the ssh-agent socket under /run/user.
+local SYSTEM_DIRS = { "/usr", "/etc", "/opt", "/nix" }
+---Symlinks into /usr on a merged-/usr system, real directories elsewhere.
+---Recreated as whichever they are, so the dynamic loader finds itself.
+local SYSTEM_LINKS = { "/bin", "/sbin", "/lib", "/lib32", "/lib64" }
+
+---The repository root: `extension/` and `bin/fieldguide` live here, and the
+---harness spawns the MCP server from the first, which calls the second.
+---@return string
+local function repo_root()
+  return vim.fn.fnamemodify(plugin_root(), ":h:h")
+end
+
+---The install prefix of an executable on PATH, resolved: a version manager's
+---shim under $HOME is a symlink into an install that is also under $HOME,
+---and both vanish with the tmpfs unless bound back.
+---@param exe string
+---@return string?
+local function prefix_of(exe)
+  local path = vim.fn.exepath(exe)
+  if path == "" then
+    return nil
+  end
+  return vim.fn.fnamemodify(util.resolve(path), ":h:h")
+end
+
+---@class fieldguide.AgentZones
+---@field config_dir string resolved config tree, read/write
+---@field config_dir_declared string? the path nvim reports, when a symlink leads to config_dir
+---@field doc_roots string[] read-only
+---@field extra_ro string[]? from the harness's needs()
+---@field extra_rw string[]? from the harness's needs()
+---@field socket string? the editor's RPC socket
+---@field cwd string? defaults to config_dir
+---@field sandbox string? "auto" | "bwrap" | "seatbelt"
+
+---Every path the agent gets back, with its mode, parents before children.
+---bwrap applies mounts in order, so a writable directory inside a read-only
+---one has to come second to win — and the reverse holds too: a doc root that
+---happens to sit inside the config tree stays read-only because it is the
+---longer path.
+---@param z fieldguide.AgentZones
+---@return { path: string, rw: boolean }[]
+local function agent_binds(z)
+  local p = cfg.paths()
+  local binds, seen = {}, {}
+  local function add(path, rw)
+    if not path or path == "" or seen[path] then
+      return
+    end
+    seen[path] = true
+    table.insert(binds, { path = path, rw = rw })
+  end
+
+  add(z.config_dir, true)
+  for _, dir in ipairs(z.doc_roots or {}) do
+    add(dir, false)
+  end
+  add(repo_root(), false)
+  -- The tools shell out to `nvim -l bin/fieldguide` and to node, and both are
+  -- commonly installed under $HOME by a version manager.
+  add(p.nvim_prefix, false)
+  add(prefix_of("node"), false)
+  -- Read-only, as under verify: a stow-style config is a directory of links
+  -- into a dotfiles tree, and without the targets every link dangles. Not
+  -- writable: the target directory may hold far more than the Neovim config,
+  -- and the path gate never granted it either.
+  for _, dir in ipairs(config_link_targets(z.config_dir)) do
+    add(dir, false)
+  end
+  for _, dir in ipairs(z.extra_ro or {}) do
+    add(dir, false)
+  end
+  for _, dir in ipairs(z.extra_rw or {}) do
+    add(dir, true)
+  end
+  if z.socket then
+    add(z.socket, true)
+  end
+
+  table.sort(binds, function(a, b)
+    if #a.path ~= #b.path then
+      return #a.path < #b.path
+    end
+    return a.path < b.path
+  end)
+  return binds
+end
+
+---@param z fieldguide.AgentZones
+---@return string[]
+local function agent_bwrap(z)
+  local home = cfg.paths().home
+  local argv = { "bwrap" }
+  local function add(...)
+    vim.list_extend(argv, { ... })
+  end
+
+  for _, dir in ipairs(SYSTEM_DIRS) do
+    add("--ro-bind-try", dir, dir)
+  end
+  for _, dir in ipairs(SYSTEM_LINKS) do
+    local target = vim.uv.fs_readlink(dir)
+    if target then
+      add("--symlink", target, dir)
+    else
+      add("--ro-bind-try", dir, dir)
+    end
+  end
+  -- /etc/resolv.conf is a symlink into here under systemd-resolved; without it
+  -- the harness has a network and no way to name anything on it.
+  add("--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve")
+  add("--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp")
+
+  -- Empty rather than absent: harnesses put sockets and locks under
+  -- $XDG_RUNTIME_DIR, and the real one holds the ssh and gpg agents' sockets.
+  local runtime = vim.env.XDG_RUNTIME_DIR
+  if runtime and runtime ~= "" then
+    add("--tmpfs", runtime)
+  end
+  -- Everything in $HOME disappears; the binds below bring back what the zones
+  -- and the harness need. After the tmpfs, or they would sit underneath it.
+  add("--tmpfs", home)
+
+  local binds = agent_binds(z)
+  for _, b in ipairs(binds) do
+    -- Not -try: a zone that silently fails to appear is a harness that
+    -- starts, cannot find its credentials or the config, and blames the user.
+    add(b.rw and "--bind" or "--ro-bind", b.path, b.path)
+  end
+
+  -- The agent works at the resolved path, but the user's own words, lazy's
+  -- specs and :help output name the declared one. A symlink, not a second
+  -- bind, so there is exactly one way in to each file.
+  local declared = z.config_dir_declared
+  if declared and declared ~= z.config_dir then
+    local covered = false
+    for _, b in ipairs(binds) do
+      covered = covered or util.is_under(declared, b.path)
+    end
+    if not covered then
+      add("--symlink", z.config_dir, declared)
+    end
+  end
+
+  add("--chdir", z.cwd or z.config_dir)
+  -- Its own PID namespace: the agent cannot signal or ptrace the editor, or
+  -- read /proc/<pid>/environ of anything else you run. The network namespace
+  -- is the one left shared; see the top of this section.
+  add("--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup-try")
+  -- --new-session: no TIOCSTI into the terminal that launched the editor.
+  add("--die-with-parent", "--new-session", "--")
+  return argv
+end
+
+---macOS, by the same rules and with the same caveats as `verify_seatbelt`:
+---nothing is bound, so the agent starts with the whole machine and has $HOME
+---taken away. Weaker than bwrap in three ways worth knowing: there is no PID
+---isolation, /tmp stays readable, and a denied read is EPERM rather than a
+---file that does not exist. Writes are denied everywhere except the config
+---tree, the harness's own state and the per-user temp dir.
+---@param z fieldguide.AgentZones
+---@return string[]
+local function agent_seatbelt(z)
+  local home = cfg.paths().home
+  local readable, writable = {}, {}
+  for _, b in ipairs(agent_binds(z)) do
+    table.insert(readable, "  (subpath " .. sbpl(b.path) .. ")")
+    if b.rw then
+      table.insert(writable, "  (subpath " .. sbpl(b.path) .. ")")
+    end
+  end
+  local tmpdir = vim.env.TMPDIR
+  if tmpdir and tmpdir ~= "" then
+    table.insert(writable, "  (subpath " .. sbpl(util.resolve(tmpdir)) .. ")")
+  end
+
+  local profile = table.concat({
+    "(version 1)",
+    "(allow default)",
+    "",
+    ";; The network stays: the harness has to reach its model provider.",
+    "",
+    "(deny file-read* (subpath " .. sbpl(home) .. "))",
+    "(allow file-read*",
+    table.concat(readable, "\n"),
+    ")",
+    "",
+    "(deny file-write*)",
+    "(allow file-write*",
+    table.concat(writable, "\n"),
+    ")",
+    '(allow file-write* (literal "/dev/null") (literal "/dev/dtracehelper") (regex #"^/dev/tty"))',
+    "",
+  }, "\n")
+
+  -- Inline with -p rather than a profile file: there is then nothing to clean
+  -- up, and nothing the agent could rewrite between turns.
+  return { "sandbox-exec", "-p", profile, "--" }
+end
+
+---Wrap a harness's argv so it runs with only the agent zones in reach. Pure:
+---builds the argv, spawns nothing, writes nothing.
+---@param argv string[] the harness command line
+---@param z fieldguide.AgentZones
+---@return string[]? argv, string? err
+function M.agent_plan(argv, z)
+  if not z or not z.config_dir then
+    return nil, "agent sandbox: no config_dir"
+  end
+  local which, err = M.backend(z.sandbox, "agent.sandbox", "fieldguide runs this harness sandboxed")
+  if not which then
+    return nil, err
+  end
+  return M._agent_plan(which, argv, z)
+end
+
+---Test-only: build the argv for a named backend, so the seatbelt profile can
+---be inspected on a machine without sandbox-exec.
+---@param which "bwrap"|"seatbelt"
+---@param argv string[]
+---@param z fieldguide.AgentZones
+---@return string[]
+function M._agent_plan(which, argv, z)
+  local out = which == "seatbelt" and agent_seatbelt(z) or agent_bwrap(z)
+  vim.list_extend(out, argv)
+  return out
 end
 
 return M
