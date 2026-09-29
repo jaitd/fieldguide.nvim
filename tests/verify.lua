@@ -179,10 +179,11 @@ end
 --     resolves against wherever the config is mounted, so a plan that moves
 --     the tree leaves every link dangling: nvim then boots an empty config
 --     and verify reports a clean boot of nothing. The init.lua here raises,
---     so a boot that never read it is caught. Under the repo rather than a
---     tempname: /tmp is a tmpfs inside the sandbox.
+--     so a boot that never read it is caught. Under $HOME rather than a
+--     tempname, because /tmp is a tmpfs inside the sandbox, and not under the
+--     repo, which CI mounts read-only.
 do
-  local base = root .. "/tests/.stow-" .. vim.uv.os_getpid()
+  local base = vim.uv.os_homedir() .. "/.fieldguide-test-stow-" .. vim.uv.os_getpid()
   vim.fn.mkdir(base .. "/config", "p")
   vim.fn.mkdir(base .. "/dotfiles/nvim", "p")
   vim.fn.writefile({ 'error("stow init.lua was read")' }, base .. "/dotfiles/nvim/init.lua")
