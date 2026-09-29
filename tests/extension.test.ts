@@ -210,6 +210,56 @@ test("pi extension", async (t) => {
     assert.equal(shell?.block, true, "bash must be refused at the hook too");
   });
 
+  // The pre-write checkpoint is what keeps a hand edit out of the agent's undo.
+  // Without it, :FieldguideUndo takes the user's own change back too, so a
+  // write that cannot be checkpointed first is refused rather than let through.
+  await t.test("a config write is refused when the editor cannot checkpoint it", async () => {
+    const gate = handlers.get("tool_call")![0];
+    const res = (await gate({ toolName: "write", input: { path: "init.lua" } }, { cwd: configRoot })) as {
+      block?: boolean;
+      reason?: string;
+    };
+    assert.equal(res?.block, true, "no checkpoint, no write");
+    assert.match(res!.reason!, /checkpoint/);
+  });
+
+  await t.test("...and when the checkpoint itself fails", async () => {
+    const stub = path.join(root, "failing-checkpoint-nvim");
+    await writeFile(stub, `#!/bin/sh\necho '{"ok":true,"result":{"ok":false,"error":"index.lock exists"}}'\n`, {
+      mode: 0o755,
+    });
+    const ext = await loadExtension({
+      FIELDGUIDE_CONFIG_DIR: configRoot,
+      FIELDGUIDE_DOC_ROOTS: docRoot,
+      FIELDGUIDE_VERBS: "state,verify",
+      FIELDGUIDE_BIN: "/dev/null",
+      FIELDGUIDE_NVIM: stub,
+      FIELDGUIDE_ADDR: "/nonexistent.sock",
+    });
+    const gate = ext!.handlers.get("tool_call")![0];
+    const res = (await gate({ toolName: "edit", input: { path: "init.lua" } }, { cwd: configRoot })) as {
+      block?: boolean;
+      reason?: string;
+    };
+    assert.equal(res?.block, true);
+    assert.match(res!.reason!, /index\.lock exists/);
+  });
+
+  await t.test("...but an unchanged tree is a checkpoint, and the write goes ahead", async () => {
+    const stub = path.join(root, "unchanged-checkpoint-nvim");
+    await writeFile(stub, `#!/bin/sh\necho '{"ok":true,"result":{"ok":true,"unchanged":true}}'\n`, { mode: 0o755 });
+    const ext = await loadExtension({
+      FIELDGUIDE_CONFIG_DIR: configRoot,
+      FIELDGUIDE_DOC_ROOTS: docRoot,
+      FIELDGUIDE_VERBS: "state,verify",
+      FIELDGUIDE_BIN: "/dev/null",
+      FIELDGUIDE_NVIM: stub,
+      FIELDGUIDE_ADDR: "/nonexistent.sock",
+    });
+    const gate = ext!.handlers.get("tool_call")![0];
+    assert.equal(await gate({ toolName: "write", input: { path: "init.lua" } }, { cwd: configRoot }), undefined);
+  });
+
   await t.test("auto-verify ignores writes outside the config tree", async () => {
     const onResult = handlers.get("tool_result")![0];
     const patch = await onResult(
