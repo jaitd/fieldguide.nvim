@@ -24,6 +24,7 @@ description = "The whole suite, most security-relevant first"
 depends = [
   "test:gate",
   "test:extension",
+  "test:mcp",
   "test:plugins",
   "test:unit",
   "test:framing",
@@ -46,6 +47,10 @@ run = "node --test tests/gate.test.ts"
 [tasks."test:extension"]
 description = "pi extension loads, registers the verbs, wires the hooks"
 run = "node --test tests/extension.test.ts"
+
+[tasks."test:mcp"]
+description = "The verbs over MCP, for harnesses that are not pi"
+run = "node --test tests/mcp.test.ts"
 
 [tasks."test:plugins"]
 description = "Plugin index — ranking, liveness, edges, and the blurb guards"
