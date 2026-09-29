@@ -174,6 +174,35 @@ do
   vim.fn.delete(base, "rf")
 end
 
+-- 9b. The same layout with *relative* links, which is what GNU stow makes by
+--     default, booted for real rather than inspected. A relative link
+--     resolves against wherever the config is mounted, so a plan that moves
+--     the tree leaves every link dangling: nvim then boots an empty config
+--     and verify reports a clean boot of nothing. The init.lua here raises,
+--     so a boot that never read it is caught. Under $HOME rather than a
+--     tempname, because /tmp is a tmpfs inside the sandbox, and not under the
+--     repo, which CI mounts read-only.
+do
+  local base = vim.uv.os_homedir() .. "/.fieldguide-test-stow-" .. vim.uv.os_getpid()
+  vim.fn.mkdir(base .. "/config", "p")
+  vim.fn.mkdir(base .. "/dotfiles/nvim", "p")
+  vim.fn.writefile({ 'error("stow init.lua was read")' }, base .. "/dotfiles/nvim/init.lua")
+  vim.uv.fs_symlink("../dotfiles/nvim/init.lua", base .. "/config/init.lua")
+
+  cfg.setup({ cwd = base .. "/config" })
+  verify.last = nil
+  local r = verify.run({})
+  check("relative stow links: init.lua is read", r.ok == false, vim.inspect(r))
+  check(
+    "relative stow links: its error is reported",
+    joined(r.errors):find("stow init.lua was read", 1, true) ~= nil,
+    joined(r.errors)
+  )
+
+  cfg.setup({})
+  vim.fn.delete(base, "rf")
+end
+
 -- 10. plan + interpret round-trip to the same result M.run gives — the split
 --     that lets the CLI own the spawn must not change what comes out the
 --     other end.

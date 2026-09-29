@@ -104,11 +104,12 @@ local function backend()
         .. "will not fall back to an unsandboxed one."
 end
 
--- Under bwrap the config tree is mounted here and pointed at with
--- XDG_CONFIG_HOME, rather than bound back onto whatever path nvim reported.
--- One mechanism covers a plain ~/.config/nvim, a dotfiles symlink, an
--- NVIM_APPNAME variant, and a fixture directory under test. seatbelt reaches
--- the same place with a symlink, for want of anything to mount.
+-- The config tree is reached through a link here, pointed at with
+-- XDG_CONFIG_HOME, rather than through whatever path nvim reported. One
+-- mechanism covers a plain ~/.config/nvim, a dotfiles symlink, an NVIM_APPNAME
+-- variant, and a fixture directory under test. A link and not a mount: under
+-- bwrap the tree itself is bound at its own path, so the relative links GNU
+-- stow makes resolve where they were written and not against this directory.
 local SANDBOX_CONFIG_HOME = "/tmp/fieldguide-config"
 local SANDBOX_PROBE = "/tmp/fieldguide-probe.lua"
 
@@ -233,8 +234,10 @@ local function bwrap_plan(config_dir)
   add("--tmpfs", "/tmp")
 
   -- Read-only, so `lazy-lock.json` — which lives inside the config tree — is
-  -- not rewritten by the boot that is only supposed to observe it.
-  add("--ro-bind", config_dir, SANDBOX_CONFIG_HOME .. "/" .. (vim.env.NVIM_APPNAME or "nvim"))
+  -- not rewritten by the boot that is only supposed to observe it. After the
+  -- /tmp tmpfs, which would otherwise bury a config that lives under /tmp.
+  add("--ro-bind", config_dir, config_dir)
+  add("--symlink", config_dir, SANDBOX_CONFIG_HOME .. "/" .. (vim.env.NVIM_APPNAME or "nvim"))
   add("--ro-bind", plugin_root() .. "/probe.lua", SANDBOX_PROBE)
 
   add("--dev", "/dev", "--proc", "/proc")
