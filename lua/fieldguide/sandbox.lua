@@ -163,6 +163,12 @@ local function verify_bwrap(config_dir)
     -- path gate above has a bug.
     "--tmpfs",
     home,
+    -- /tmp before anything is bound, like $HOME above: a data dir, a stow
+    -- tree or a local plugin under /tmp would otherwise be mounted and then
+    -- buried by this tmpfs, and a state dir there that does not exist yet
+    -- could not be created under the read-only root at all.
+    "--tmpfs",
+    "/tmp",
   }
 
   local function add(...)
@@ -214,7 +220,6 @@ local function verify_bwrap(config_dir)
   -- mount: `E886: … read-only file system` is what the relaxed version costs.
   add("--tmpfs", vim.fn.stdpath("state"))
   add("--tmpfs", vim.fn.stdpath("cache"))
-  add("--tmpfs", "/tmp")
 
   -- Read-only, so `lazy-lock.json` — which lives inside the config tree — is
   -- not rewritten by the boot that is only supposed to observe it. After the
