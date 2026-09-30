@@ -348,6 +348,13 @@ test("errors", async (t) => {
     assert.deepEqual((await client.request("ping")).result, {});
   });
 
+  await t.test("a method that is not a string is an invalid request, not a crash", async () => {
+    client.raw(JSON.stringify({ jsonrpc: "2.0", method: 123 }));
+    const res = await client.requestWithId(77, 123 as unknown as string);
+    assert.equal(res.error.code, -32600);
+    assert.deepEqual((await client.request("ping")).result, {});
+  });
+
   await t.test("a garbled line is answered and survived", async () => {
     client.raw("{not json");
     await sleep(100);

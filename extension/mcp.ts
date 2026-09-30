@@ -253,7 +253,15 @@ function serve() {
       fail(null, -32700, "parse error");
       return;
     }
-    if (typeof message !== "object" || message === null || Array.isArray(message) || !message.method) {
+    // A string method, checked here once, so nothing downstream has to guard
+    // every use of it: a number in its place used to crash the server.
+    if (
+      typeof message !== "object" ||
+      message === null ||
+      Array.isArray(message) ||
+      typeof message.method !== "string" ||
+      !message.method
+    ) {
       fail((message as Message)?.id ?? null, -32600, "invalid request");
       return;
     }
