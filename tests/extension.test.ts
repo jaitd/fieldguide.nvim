@@ -245,6 +245,27 @@ test("pi extension", async (t) => {
     assert.match(res!.reason!, /index\.lock exists/);
   });
 
+  await t.test("...and when the editor answers without saying a checkpoint was taken", async () => {
+    // Fail closed: only an explicit success from the verb counts.
+    const stub = path.join(root, "silent-checkpoint-nvim");
+    await writeFile(stub, `#!/bin/sh\necho '{"ok":true}'\n`, { mode: 0o755 });
+    const ext = await loadExtension({
+      FIELDGUIDE_CONFIG_DIR: configRoot,
+      FIELDGUIDE_DOC_ROOTS: docRoot,
+      FIELDGUIDE_VERBS: "state,verify",
+      FIELDGUIDE_BIN: "/dev/null",
+      FIELDGUIDE_NVIM: stub,
+      FIELDGUIDE_ADDR: "/nonexistent.sock",
+    });
+    const gate = ext!.handlers.get("tool_call")![0];
+    const res = (await gate({ toolName: "write", input: { path: "init.lua" } }, { cwd: configRoot })) as {
+      block?: boolean;
+      reason?: string;
+    };
+    assert.equal(res?.block, true, "a checkpoint nobody confirmed is not one");
+    assert.match(res!.reason!, /checkpoint/);
+  });
+
   await t.test("...but an unchanged tree is a checkpoint, and the write goes ahead", async () => {
     const stub = path.join(root, "unchanged-checkpoint-nvim");
     await writeFile(stub, `#!/bin/sh\necho '{"ok":true,"result":{"ok":true,"unchanged":true}}'\n`, { mode: 0o755 });

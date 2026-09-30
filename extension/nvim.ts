@@ -141,11 +141,12 @@ export default function (pi: ExtensionAPI) {
           // Refused, not waved through, when the snapshot does not happen: the
           // write would then share a checkpoint with the user's own edits, and
           // undoing it would take those back too. Failure can arrive at either
-          // layer — the call to the editor, or the verb it ran.
+          // layer — the call to the editor, or the verb it ran — and only an
+          // explicit success from the verb counts, so silence refuses too.
           const checkpoint = await callVerb("checkpoint", { label: "before agent write" }, ctx.signal);
           const result = checkpoint.result as { ok?: boolean; error?: string } | undefined;
-          if (!checkpoint.ok || result?.ok === false) {
-            const why = checkpoint.ok ? result?.error : checkpoint.error;
+          if (!checkpoint.ok || result?.ok !== true) {
+            const why = !checkpoint.ok ? checkpoint.error : (result?.error ?? "the editor did not confirm one");
             return {
               block: true,
               reason: `cannot checkpoint the config before writing, so the write would not be undoable on its own: ${why ?? "unknown error"}`,
