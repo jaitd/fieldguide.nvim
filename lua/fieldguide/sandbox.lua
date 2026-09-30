@@ -376,9 +376,15 @@ end
 -- - Its own credentials. A harness cannot log in with a token it cannot read,
 --   so `needs()` binds them back. A prompt-injected agent can read that token.
 --   It cannot read anything else of yours.
--- - Talking to this editor, over the one socket bound in. That is how the
---   tools work at all; what reaches the editor through it is the closed verb
---   table in api.lua, not arbitrary Lua.
+-- - Calling fieldguide's tools, over the one socket bound in: the MCP server,
+--   which runs out here with the editor. Anything that connects to it gets the
+--   tools the agent already has, and nothing else.
+--
+-- What is never bound in is the editor's own RPC socket. The closed verb
+-- table is enforced by bin/fieldguide, a client, and an agent with a shell
+-- does not have to use that client: one `nvim --server … --remote-expr` and
+-- it runs Lua in the unsandboxed editor. `agent_plan` refuses any plan that
+-- would leave one of this editor's addresses within reach.
 
 ---Top-level system directories a binary needs to run at all. Allowlisted
 ---rather than `--ro-bind / /` and subtracting, as `verify` does: verify runs a
@@ -416,7 +422,7 @@ end
 ---@field doc_roots string[] read-only
 ---@field extra_ro string[]? from the harness's needs()
 ---@field extra_rw string[]? from the harness's needs()
----@field socket string? the editor's RPC socket
+---@field mcp_socket string? the MCP server's socket (`mcp.ts --listen`), never the editor's
 ---@field cwd string? defaults to config_dir
 ---@field sandbox string? "auto" | "bwrap" | "seatbelt"
 
@@ -460,8 +466,8 @@ local function agent_binds(z)
   for _, dir in ipairs(z.extra_rw or {}) do
     add(dir, true)
   end
-  if z.socket then
-    add(z.socket, true)
+  if z.mcp_socket then
+    add(z.mcp_socket, true)
   end
 
   table.sort(binds, function(a, b)
@@ -529,6 +535,9 @@ local function agent_bwrap(z)
     end
   end
 
+  -- The editor's address is no use in here and is not left lying around: the
+  -- MCP server outside is what talks to it.
+  add("--unsetenv", "NVIM", "--unsetenv", "NVIM_LISTEN_ADDRESS", "--unsetenv", "FIELDGUIDE_ADDR")
   add("--chdir", z.cwd or z.config_dir)
   -- Its own PID namespace: the agent cannot signal or ptrace the editor, or
   -- read /proc/<pid>/environ of anything else you run. The network namespace
@@ -585,6 +594,39 @@ local function agent_seatbelt(z)
   return { "sandbox-exec", "-p", profile, "--" }
 end
 
+---Why this editor would be reachable from inside a plan, or nil if it would
+---not be. Its unix sockets normally sit under $XDG_RUNTIME_DIR or /tmp, both
+---empty in here; the cases that matter are a socket passed in as the MCP one,
+---a socket inside a zone that is bound back, and a TCP listener, which the
+---shared network reaches wherever it is. Another Neovim's addresses cannot be
+---enumerated from here; under /tmp and the runtime dir they are hidden alike.
+---@param z fieldguide.AgentZones
+---@return string?
+local function editor_reachable(z)
+  local addresses = vim.fn.serverlist()
+  for _, name in ipairs({ vim.v.servername, vim.env.NVIM, vim.env.NVIM_LISTEN_ADDRESS }) do
+    if name and name ~= "" then
+      table.insert(addresses, name)
+    end
+  end
+  local binds = agent_binds(z)
+  for _, addr in ipairs(addresses) do
+    if not addr:find("/", 1, true) and addr:find(":%d+$") then
+      return ("this editor listens on TCP (%s), which the agent's network would reach"):format(addr)
+    end
+    local resolved = util.resolve(addr)
+    if z.mcp_socket and resolved == util.resolve(z.mcp_socket) then
+      return ("the MCP socket is this editor's own RPC socket (%s)"):format(addr)
+    end
+    for _, b in ipairs(binds) do
+      if util.is_under(resolved, b.path) then
+        return ("this editor's socket %s is inside %s, which the agent can reach"):format(addr, b.path)
+      end
+    end
+  end
+  return nil
+end
+
 ---Wrap a harness's argv so it runs with only the agent zones in reach. Pure:
 ---builds the argv, spawns nothing, writes nothing.
 ---@param argv string[] the harness command line
@@ -597,6 +639,10 @@ function M.agent_plan(argv, z)
   local which, err = M.backend(z.sandbox, "agent.sandbox", "fieldguide runs this harness sandboxed")
   if not which then
     return nil, err
+  end
+  local reachable = editor_reachable(z)
+  if reachable then
+    return nil, "agent sandbox: " .. reachable .. ". The agent would run Lua in the editor, outside the sandbox."
   end
   return M._agent_plan(which, argv, z)
 end

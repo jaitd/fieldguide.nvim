@@ -132,6 +132,40 @@ do
   )
 end
 
+-- The editor's own RPC socket runs arbitrary Lua outside the sandbox, so no
+-- plan may leave it within reach. Addresses are started in this very process,
+-- which is the editor as far as `agent_plan` can tell.
+io.write("agent sandbox: never within reach of the editor\n")
+if vim.fn.executable("bwrap") == 0 and vim.fn.executable("sandbox-exec") == 0 then
+  skipped = skipped + 1
+  io.write("  skip no sandbox backend installed\n")
+else
+  local function refused(extra, pattern)
+    local argv, err = sandbox.agent_plan({ "h" }, vim.tbl_extend("force", zones, extra or {}))
+    return argv == nil and (err or ""):find(pattern) ~= nil, err or table.concat(argv or {}, " ")
+  end
+
+  local own = vim.fn.serverstart(box .. "/own.sock")
+  check("refused: the editor's socket passed as the MCP one", refused({ mcp_socket = own }, "own RPC socket"))
+  vim.fn.serverstop(own)
+
+  local inside_zone = vim.fn.serverstart(config_dir .. "/editor.sock")
+  check("refused: an editor socket inside a bound zone", refused({}, "inside"))
+  vim.fn.serverstop(inside_zone)
+
+  local ok_tcp, tcp = pcall(vim.fn.serverstart, "127.0.0.1:0")
+  if ok_tcp and tcp ~= "" then
+    check("refused: an editor listening on TCP", refused({}, "TCP"))
+    vim.fn.serverstop(tcp)
+  else
+    skipped = skipped + 1
+    io.write("  skip this build cannot listen on TCP\n")
+  end
+
+  local argv = sandbox.agent_plan({ "h" }, vim.tbl_extend("force", zones, { mcp_socket = box .. "/mcp.sock" }))
+  check("allowed: a separate MCP socket, with the editor out of reach", argv ~= nil)
+end
+
 io.write("agent sandbox: seatbelt profile\n")
 do
   local argv = sandbox._agent_plan("seatbelt", { "harness" }, zones)
@@ -154,9 +188,14 @@ if vim.fn.executable("bwrap") == 0 then
   skipped = skipped + 1
   io.write("  skip bwrap is not installed\n")
 else
-  -- A live editor for the socket, with fieldguide loaded, as the MCP server
-  -- would find it.
+  -- A live editor, as a harness would run beside. Its socket is where Neovim
+  -- puts one by default, which is never bound in; the MCP server's socket
+  -- stands in for the one path to the tools that is.
   local sock = box .. "/nvim.sock"
+  local mcp_sock = box .. "/mcp.sock"
+  local listener = assert(vim.uv.new_pipe(false))
+  assert(listener:bind(mcp_sock))
+  listener:listen(1, function() end)
   local server = vim.system({
     "nvim",
     "--headless",
@@ -172,8 +211,11 @@ else
     return vim.uv.fs_stat(sock) ~= nil
   end, 50)
 
-  local argv =
-    sandbox._agent_plan("bwrap", { "sh", "-c", 'eval "$PROBE"' }, vim.tbl_extend("force", zones, { socket = sock }))
+  local argv = sandbox._agent_plan(
+    "bwrap",
+    { "sh", "-c", 'eval "$PROBE"' },
+    vim.tbl_extend("force", zones, { mcp_socket = mcp_sock })
+  )
 
   ---Run one shell probe inside the sandbox.
   ---@param script string
@@ -202,20 +244,52 @@ else
   r = inside("cat " .. doc_root .. "/fixture.txt")
   check("the doc root can be read", r.code == 0 and (r.stdout or ""):find("fixture") ~= nil, vim.inspect(r))
 
-  -- The whole tool path: the CLI the MCP server calls, through the socket. By
-  -- absolute path: a PATH entry under $HOME, such as ~/.local/bin, is gone in
-  -- here unless something binds it back, and the install prefix is what is.
-  r = inside(("%q -l %q state --what=nvim"):format(cfg.paths().nvim_bin, root .. "/bin/fieldguide"))
-  local ok_json, decoded = pcall(vim.json.decode, r.stdout or "")
+  -- The escape the sandbox exists to stop: straight to the editor's RPC socket,
+  -- which runs Lua outside. By absolute path, as an agent would find it: the
+  -- nvim install is bound read-only because the tools need it.
+  r = inside(
+    ("%q --headless --clean --server %q --remote-expr 'readfile(%q)[0]'"):format(
+      cfg.paths().nvim_bin,
+      sock,
+      outside .. "/secret.txt"
+    )
+  )
   check(
-    "the editor is reachable over the bound socket",
-    r.code == 0 and ok_json and decoded.ok ~= false,
+    "the editor's socket is out of reach, so the canary stays hidden",
+    not ((r.stdout or "") .. (r.stderr or "")):find("CANARY"),
     vim.inspect(r)
   )
+
+  r = inside('echo "${FIELDGUIDE_ADDR-unset} ${NVIM-unset}"')
+  check("the editor's address is not handed in", vim.trim(r.stdout or "") == "unset unset", r.stdout)
+
+  r = inside("test -S " .. mcp_sock)
+  check("the MCP server's socket is the one way to the tools", r.code == 0, vim.inspect(r))
 
   r = inside("ps -e -o pid= | wc -l")
   check("only the sandbox's own processes are visible", (tonumber(vim.trim(r.stdout or "")) or 99) < 10, r.stdout)
 
+  -- A doc root inside the config tree — lazy's data kept beside the config —
+  -- stays read-only: the longer path is mounted second, and wins.
+  local nested = config_dir .. "/vendor-docs"
+  vim.fn.mkdir(nested, "p")
+  local nested_argv = sandbox._agent_plan(
+    "bwrap",
+    { "sh", "-c", 'eval "$PROBE"' },
+    vim.tbl_extend("force", zones, { doc_roots = { doc_root, nested } })
+  )
+  local env = vim.fn.environ()
+  env.PROBE = ("echo x > %q/new.txt; echo $?; echo y > %q/ok.lua; echo $?"):format(nested, config_dir)
+  r = vim.system(nested_argv, { env = env, clear_env = true, text = true }):wait(20000)
+  check(
+    "a doc root nested in the config tree stays read-only",
+    vim.split(vim.trim(r.stdout or ""), "\n")[1] ~= "0"
+      and vim.split(vim.trim(r.stdout or ""), "\n")[2] == "0"
+      and vim.fn.filereadable(nested .. "/new.txt") == 0,
+    vim.inspect(r)
+  )
+
+  listener:close()
   server:kill(15)
 end
 
