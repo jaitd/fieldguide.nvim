@@ -281,6 +281,22 @@ do
 end
 
 do
+  -- Cut off at the limit, reported by the message and again by the result.
+  local out = run({
+    { type = "stream_event", event = { type = "message_start", message = { id = "m1" } } },
+    { type = "stream_event", event = { type = "message_delta", delta = { stop_reason = "max_tokens" } } },
+    { type = "stream_event", event = { type = "message_stop" } },
+    { type = "result", subtype = "success", is_error = false, stop_reason = "max_tokens", uuid = "r1" },
+  })
+  local me, te = of_kind(out, "message_end")[1], of_kind(out, "turn_end")[1]
+  check(
+    "a stop both report carries one timestamp, so it is said once",
+    me and te and me.message.timestamp == "m1" and te.message.timestamp == "m1",
+    vim.inspect({ me and me.message, te and te.message })
+  )
+end
+
+do
   local out = run({
     { type = "stream_event", event = { type = "message_start", message = { id = "m1" } } },
     { type = "stream_event", event = { type = "message_delta", delta = { stop_reason = "refusal" } } },

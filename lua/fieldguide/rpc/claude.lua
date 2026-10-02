@@ -185,6 +185,7 @@ end
 ---@field model string?
 ---@field private _blocks table<integer, table> the streamed message's content blocks, by index
 ---@field private _message table? the message being streamed
+---@field private _last_message_id string? the turn's last finished message, for its result
 ---@field private _streamed table<string, boolean> message ids whose text arrived as deltas
 ---@field private _calls table<string, table> tool_use_id -> { tool, args }
 ---@field private _verify table<string, string> tool_use_id -> verify paragraph
@@ -267,6 +268,7 @@ function Normaliser:_stream_event(raw)
     if anthropic == "refusal" then
       event.error = "the model declined to answer"
     end
+    self._last_message_id = msg.id
     self._message = nil
     return { event }
   end
@@ -411,7 +413,12 @@ end
 ---@return fieldguide.Event[]
 function Normaliser:_result(raw)
   local out = {}
-  local key = raw.uuid or raw.session_id
+  -- Stamped with the turn's last message, as message_end was: a stop that both
+  -- report is then one stop to the panel, which dedupes on the timestamp, and
+  -- not a warning printed twice. A result with no message before it has only
+  -- its own id.
+  local key = self._last_message_id or raw.uuid or raw.session_id
+  self._last_message_id = nil
   if raw.terminal_reason == "aborted_streaming" or raw.terminal_reason == "aborted_tools" then
     -- Asked for. Not an error, and not worth a line saying so.
     table.insert(out, { kind = "turn_end", stop_reason = "aborted", message = { timestamp = key }, raw = raw })
