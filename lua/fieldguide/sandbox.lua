@@ -548,50 +548,139 @@ local function agent_bwrap(z)
   return argv
 end
 
----macOS, by the same rules and with the same caveats as `verify_seatbelt`:
----nothing is bound, so the agent starts with the whole machine and has $HOME
----taken away. Weaker than bwrap in three ways worth knowing: there is no PID
----isolation, /tmp stays readable, and a denied read is EPERM rather than a
----file that does not exist. Writes are denied everywhere except the config
----tree, the harness's own state and the per-user temp dir.
+---What a binary needs to start on macOS, readable to the agent. The same
+---allowlist as SYSTEM_DIRS, by the names macOS gives these: /etc, /var and
+---/tmp are links into /private, and seatbelt matches the resolved path, so
+---each link is readable as a link and what it points to is listed on its own.
+---/tmp and /var are not in it beyond their links. /Volumes and /Users are not
+---in it at all.
+local SEATBELT_SYSTEM = {
+  "/usr",
+  "/bin",
+  "/sbin",
+  "/System",
+  "/Library",
+  "/opt",
+  "/nix",
+  "/dev",
+  "/private/etc",
+  "/private/var/db/timezone",
+  "/private/var/select",
+}
+local SEATBELT_LINKS = { "/etc", "/var", "/tmp" }
+
+---macOS. Seatbelt has no mount namespace, so nothing is bound: the profile
+---denies every read and write and allows back the same zones bwrap binds, in
+---the same order. Rules later in a profile win, so a doc root nested inside
+---the config tree is denied writes after the tree is allowed them — the
+---longer path wins here as it does under bwrap.
+---
+---Weaker than bwrap in ways worth knowing:
+---  - no PID isolation: the agent sees, and can signal, your other processes
+---  - a denied path is EPERM, not missing, and the names of the ancestors of
+---    each zone can be stat'ed (but not listed) so a path can be walked to it
+---  - $TMPDIR is shared with every other process of yours, readable and
+---    writable, where bwrap gives an empty /tmp
+---  - the environment is cleared of the editor's address by `env -u`, since
+---    sandbox-exec cannot unset anything itself
+---
+---A unix socket is not a file read to seatbelt: one `connect()` reaches the
+---editor's socket wherever it is, readable or not. So unix sockets are denied
+---as well, but for the MCP server's and the system resolver's.
 ---@param z fieldguide.AgentZones
 ---@return string[]
 local function agent_seatbelt(z)
-  local home = cfg.paths().home
-  local readable, writable = {}, {}
-  for _, b in ipairs(agent_binds(z)) do
-    table.insert(readable, "  (subpath " .. sbpl(b.path) .. ")")
-    if b.rw then
-      table.insert(writable, "  (subpath " .. sbpl(b.path) .. ")")
+  local binds = agent_binds(z)
+  local tmpdir = vim.env.TMPDIR
+  tmpdir = tmpdir and tmpdir ~= "" and util.resolve(tmpdir) or nil
+
+  local readable, walkable, writes = {}, {}, {}
+  local function walk(path)
+    local parent = vim.fs.dirname(path)
+    while parent and parent ~= "/" and not walkable[parent] do
+      walkable[parent] = true
+      parent = vim.fs.dirname(parent)
     end
   end
-  local tmpdir = vim.env.TMPDIR
-  if tmpdir and tmpdir ~= "" then
-    table.insert(writable, "  (subpath " .. sbpl(util.resolve(tmpdir)) .. ")")
+  for _, dir in ipairs(SEATBELT_SYSTEM) do
+    table.insert(readable, "  (subpath " .. sbpl(dir) .. ")")
+  end
+  for _, link in ipairs(SEATBELT_LINKS) do
+    table.insert(readable, "  (literal " .. sbpl(link) .. ")")
+  end
+  for _, b in ipairs(binds) do
+    table.insert(readable, "  (subpath " .. sbpl(b.path) .. ")")
+    walk(b.path)
+    -- One rule per zone, in agent_binds' order, allow or deny: the last rule
+    -- that matches decides, so a read-only zone inside a writable one stays
+    -- read-only, and a writable one inside a read-only one stays writable.
+    table.insert(writes, ("(%s file-write* (subpath %s))"):format(b.rw and "allow" or "deny", sbpl(b.path)))
+  end
+  if tmpdir then
+    table.insert(readable, "  (subpath " .. sbpl(tmpdir) .. ")")
+    walk(tmpdir)
+    table.insert(writes, "(allow file-write* (subpath " .. sbpl(tmpdir) .. "))")
+  end
+  -- The path nvim reports, when a symlink leads to the config tree: the link
+  -- itself, so it can be followed, as bwrap recreates it.
+  local declared = z.config_dir_declared
+  if declared and declared ~= z.config_dir then
+    table.insert(readable, "  (literal " .. sbpl(declared) .. ")")
+    walk(declared)
+  end
+  local ancestors = {}
+  for dir in pairs(walkable) do
+    table.insert(ancestors, "  (literal " .. sbpl(dir) .. ")")
+  end
+  table.sort(ancestors)
+
+  local sockets = { '  (remote unix-socket (path-literal "/private/var/run/mDNSResponder"))' }
+  if z.mcp_socket then
+    table.insert(sockets, "  (remote unix-socket (path-literal " .. sbpl(util.resolve(z.mcp_socket)) .. "))")
   end
 
   local profile = table.concat({
     "(version 1)",
     "(allow default)",
     "",
-    ";; The network stays: the harness has to reach its model provider.",
-    "",
-    "(deny file-read* (subpath " .. sbpl(home) .. "))",
+    ";; Nothing is readable but the system and the zones. The root directory",
+    ";; itself is: dyld aborts every binary at launch without it.",
+    "(deny file-read*)",
+    '(allow file-read* (literal "/"))',
     "(allow file-read*",
     table.concat(readable, "\n"),
     ")",
+    "(allow file-read-metadata",
+    table.concat(ancestors, "\n"),
+    ")",
     "",
     "(deny file-write*)",
-    "(allow file-write*",
-    table.concat(writable, "\n"),
-    ")",
+    table.concat(writes, "\n"),
     '(allow file-write* (literal "/dev/null") (literal "/dev/dtracehelper") (regex #"^/dev/tty"))',
+    "",
+    ";; The network stays: the harness has to reach its model provider. Unix",
+    ";; sockets do not, or the editor's own would be one connect() away.",
+    "(deny network-outbound (remote unix-socket))",
+    "(allow network-outbound",
+    table.concat(sockets, "\n"),
+    ")",
     "",
   }, "\n")
 
   -- Inline with -p rather than a profile file: there is then nothing to clean
   -- up, and nothing the agent could rewrite between turns.
-  return { "sandbox-exec", "-p", profile, "--" }
+  return {
+    "sandbox-exec",
+    "-p",
+    profile,
+    "/usr/bin/env",
+    "-u",
+    "NVIM",
+    "-u",
+    "NVIM_LISTEN_ADDRESS",
+    "-u",
+    "FIELDGUIDE_ADDR",
+  }
 end
 
 ---Why this editor would be reachable from inside a plan, or nil if it would
@@ -619,7 +708,7 @@ local function editor_reachable(z)
       return ("the MCP socket is this editor's own RPC socket (%s)"):format(addr)
     end
     for _, b in ipairs(binds) do
-      if util.is_under(resolved, b.path) then
+      if util.is_under(resolved, util.resolve(b.path)) then
         return ("this editor's socket %s is inside %s, which the agent can reach"):format(addr, b.path)
       end
     end

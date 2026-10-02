@@ -35,8 +35,11 @@ local function find(argv, flag, dst)
 end
 
 -- A fixture laid out the way the zones are: a config tree, a doc root, and a
--- canary beside them that must not exist from inside.
-local box = util.resolve(vim.fn.tempname())
+-- canary beside them that must not exist from inside. Under /tmp, not
+-- `tempname()`: on macOS that is inside $TMPDIR, which the agent may write,
+-- and a canary there would be in reach by design. Resolved, because /tmp is a
+-- link to /private/tmp there and the zones are real paths.
+local box = util.resolve(assert(vim.uv.fs_mkdtemp("/tmp/fieldguide-sandbox-XXXXXX")))
 local config_dir = box .. "/cfg"
 local doc_root = box .. "/docs"
 local outside = box .. "/outside"
@@ -171,31 +174,38 @@ do
   local argv = sandbox._agent_plan("seatbelt", { "harness" }, zones)
   local profile = argv[3] or ""
   check("inline profile, no file to clean up", argv[1] == "sandbox-exec" and argv[2] == "-p", table.concat(argv, " "))
+  -- Denied everywhere and allowed back, as bwrap binds: denying $HOME alone
+  -- left /tmp and every mounted volume readable to a shell with a network.
+  check("reads are denied by default", profile:find("\n(deny file-read*)\n", 1, true) ~= nil, profile)
+  check("writes are denied by default", profile:find("\n(deny file-write*)\n", 1, true) ~= nil, profile)
+  check("the config tree is readable", profile:find('(subpath "' .. config_dir .. '")', 1, true) ~= nil, profile)
   check(
-    "reads of $HOME are denied",
-    profile:find('(deny file-read* (subpath "' .. home .. '"))', 1, true) ~= nil,
+    "the doc root is not writable",
+    not profile:find('(allow file-write* (subpath "' .. doc_root .. '"))', 1, true),
     profile
   )
-  check("writes are denied by default", profile:find("(deny file-write*)", 1, true) ~= nil, profile)
-  check("the config tree is readable", profile:find('(subpath "' .. config_dir .. '")', 1, true) ~= nil, profile)
-  local writes = profile:match("%(deny file%-write%*%)(.*)$") or ""
-  check("the doc root is not writable", not writes:find(doc_root, 1, true), profile)
-  check("the network is not denied", not profile:find("deny network", 1, true), profile)
+  check("the network is not denied", not profile:find("(deny network*)", 1, true), profile)
+  check(
+    "unix sockets are, but for the MCP one",
+    profile:find("(deny network-outbound (remote unix-socket))", 1, true) ~= nil,
+    profile
+  )
+  check(
+    "the editor's address is unset",
+    table.concat(argv, " "):find("-u NVIM -u NVIM_LISTEN_ADDRESS -u FIELDGUIDE_ADDR harness", 1, true) ~= nil,
+    table.concat(argv, " ")
+  )
 end
 
-io.write("agent sandbox: from inside (bwrap)\n")
-if vim.fn.executable("bwrap") == 0 then
-  skipped = skipped + 1
-  io.write("  skip bwrap is not installed\n")
-else
+---What a shell inside the plan can and cannot reach, run for real.
+---@param which "bwrap"|"seatbelt"
+local function from_inside(which)
   -- A live editor, as a harness would run beside. Its socket is where Neovim
-  -- puts one by default, which is never bound in; the MCP server's socket
-  -- stands in for the one path to the tools that is.
-  local sock = box .. "/nvim.sock"
+  -- puts one by default, which is never bound in — and on macOS is inside
+  -- $TMPDIR, which the agent can read and write. A second Neovim stands in for
+  -- the MCP server, the one socket that is meant to answer.
+  local sock = vim.fn.tempname() .. ".sock"
   local mcp_sock = box .. "/mcp.sock"
-  local listener = assert(vim.uv.new_pipe(false))
-  assert(listener:bind(mcp_sock))
-  listener:listen(1, function() end)
   local server = vim.system({
     "nvim",
     "--headless",
@@ -207,12 +217,13 @@ else
     "-c",
     ("lua require('fieldguide').setup({ cwd = %q })"):format(config_dir),
   })
+  local mcp = vim.system({ "nvim", "--headless", "--clean", "--listen", mcp_sock })
   vim.wait(5000, function()
-    return vim.uv.fs_stat(sock) ~= nil
+    return vim.uv.fs_stat(sock) ~= nil and vim.uv.fs_stat(mcp_sock) ~= nil
   end, 50)
 
   local argv = sandbox._agent_plan(
-    "bwrap",
+    which,
     { "sh", "-c", 'eval "$PROBE"' },
     vim.tbl_extend("force", zones, { mcp_socket = mcp_sock })
   )
@@ -235,7 +246,12 @@ else
   check("~/.ssh does not exist", r.code ~= 0, vim.inspect(r))
 
   r = inside("echo x > " .. doc_root .. "/new.txt")
-  check("the doc root cannot be written", r.code ~= 0 and (r.stderr or ""):find("Read%-only") ~= nil, r.stderr)
+  -- EROFS under bwrap, EPERM under seatbelt: either way, refused by the kernel.
+  check(
+    "the doc root cannot be written",
+    r.code ~= 0 and ((r.stderr or ""):find("Read%-only") or (r.stderr or ""):find("not permitted")) ~= nil,
+    r.stderr
+  )
 
   r = inside("echo written > " .. config_dir .. "/new.lua && cat " .. config_dir .. "/new.lua")
   check("the config tree can be written", r.code == 0 and vim.trim(r.stdout or "") == "written", vim.inspect(r))
@@ -263,18 +279,24 @@ else
   r = inside('echo "${FIELDGUIDE_ADDR-unset} ${NVIM-unset}"')
   check("the editor's address is not handed in", vim.trim(r.stdout or "") == "unset unset", r.stdout)
 
-  r = inside("test -S " .. mcp_sock)
-  check("the MCP server's socket is the one way to the tools", r.code == 0, vim.inspect(r))
+  r = inside(("%q --headless --clean --server %q --remote-expr '1+1'"):format(cfg.paths().nvim_bin, mcp_sock))
+  check("the MCP server's socket is the one way to the tools", vim.trim(r.stdout or "") == "2", vim.inspect(r))
 
-  r = inside("ps -e -o pid= | wc -l")
-  check("only the sandbox's own processes are visible", (tonumber(vim.trim(r.stdout or "")) or 99) < 10, r.stdout)
+  r = inside("ls " .. home)
+  check("$HOME cannot be listed", r.code ~= 0 and not (r.stdout or ""):find("%S"), vim.inspect(r))
+
+  -- Seatbelt has no PID namespace; see `agent_seatbelt`.
+  if which == "bwrap" then
+    r = inside("ps -e -o pid= | wc -l")
+    check("only the sandbox's own processes are visible", (tonumber(vim.trim(r.stdout or "")) or 99) < 10, r.stdout)
+  end
 
   -- A doc root inside the config tree — lazy's data kept beside the config —
   -- stays read-only: the longer path is mounted second, and wins.
   local nested = config_dir .. "/vendor-docs"
   vim.fn.mkdir(nested, "p")
   local nested_argv = sandbox._agent_plan(
-    "bwrap",
+    which,
     { "sh", "-c", 'eval "$PROBE"' },
     vim.tbl_extend("force", zones, { doc_roots = { doc_root, nested } })
   )
@@ -289,8 +311,19 @@ else
     vim.inspect(r)
   )
 
-  listener:close()
+  mcp:kill(15)
   server:kill(15)
+end
+
+for _, which in ipairs({ "bwrap", "seatbelt" }) do
+  local exe = which == "bwrap" and "bwrap" or "sandbox-exec"
+  io.write(("agent sandbox: from inside (%s)\n"):format(which))
+  if vim.fn.executable(exe) == 0 then
+    skipped = skipped + 1
+    io.write(("  skip %s is not installed\n"):format(exe))
+  else
+    from_inside(which)
+  end
 end
 
 vim.fn.delete(box, "rf")
