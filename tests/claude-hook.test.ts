@@ -220,7 +220,7 @@ describe("the hook process", () => {
       assert.match(res.stdout, /read-only/);
     });
 
-    const postEvent = (file_path: string, id = "toolu_1") =>
+    const postEvent = (file_path: string, id = "toolu_1", extra: Record<string, unknown> = {}) =>
       JSON.stringify({
         hook_event_name: "PostToolUse",
         tool_name: "Edit",
@@ -228,6 +228,7 @@ describe("the hook process", () => {
         tool_input: { file_path, old_string: "a", new_string: "b" },
         tool_response: {},
         cwd: zones.cwd,
+        ...extra,
       });
 
     test("says so when the server is missing, rather than staying quiet", async () => {
@@ -272,6 +273,28 @@ describe("the hook process", () => {
         postEvent(path.join(zones.docRoots[0], "doc/x.txt")),
       );
       assert.equal(res.stdout, "");
+    });
+
+    // A write that did not land: nothing to checkpoint, and a verify of the
+    // untouched file would read as the write having passed.
+    for (const [name, extra] of [
+      ["reported as PostToolUseFailure", { hook_event_name: "PostToolUseFailure", error: "EACCES" }],
+      ["with an error string for a response", { tool_response: "<tool_use_error>String to replace not found" }],
+      ["with an error in the response", { tool_response: { error: "EACCES: permission denied" } }],
+      ["with success: false", { tool_response: { success: false } }],
+    ] as const) {
+      test(`a failed write is not verified: ${name}`, async () => {
+        await writeFile(path.join(tree, "extension/mcp.ts"), `console.log("[fieldguide] boot OK");\n`);
+        const res = runHook(hook(), "post", postEvent("init.lua", "toolu_1", extra));
+        assert.equal(res.status, 0, res.stderr);
+        assert.equal(res.stdout, "");
+      });
+    }
+
+    test("check mode answers without reading any input", () => {
+      const res = runHook(hook(), "check", "");
+      assert.equal(res.status, 0, res.stderr);
+      assert.equal(res.stdout.trim(), "ok");
     });
 
     test("nothing to verify when verify is not an enabled verb", () => {

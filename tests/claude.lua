@@ -427,10 +427,34 @@ end))
 local mcp = vim.json.decode(table.concat(vim.fn.readfile(flag("--mcp-config")), "\n"))
 check("the MCP server gets the editor's environment", mcp.mcpServers.fieldguide.env.FIELDGUIDE_ADDR == "/sock")
 
-check(
-  "preflight refuses to launch without node for the hooks",
-  h.preflight(vim.tbl_extend("force", o, { node = "" })) ~= nil
-)
+do
+  -- A stand-in `claude` on PATH, so each refusal below is about node and not
+  -- about a machine without Claude installed.
+  local bin = scratch .. "/bin"
+  vim.fn.mkdir(bin, "p")
+  vim.fn.writefile({ "#!/bin/sh" }, bin .. "/claude")
+  vim.uv.fs_chmod(bin .. "/claude", tonumber("755", 8))
+  local path = vim.env.PATH
+  vim.env.PATH = bin .. ":" .. path
+  local function refused(node, pattern)
+    local err = h.preflight(vim.tbl_extend("force", o, { node = node }))
+    return err ~= nil and (pattern == nil or err:find(pattern, 1, true) ~= nil), err
+  end
+
+  check("preflight refuses to launch without node for the hooks", refused("", "not on PATH"))
+  -- Any non-empty string used to pass, and Claude treats a hook that cannot
+  -- start as a non-blocking error: the tool then runs with no gate at all.
+  check("…or with a node that does not exist", refused(scratch .. "/no-such-node", "cannot run"))
+  vim.fn.writefile({ "#!/bin/sh", "exit 0" }, bin .. "/not-node")
+  vim.uv.fs_chmod(bin .. "/not-node", tonumber("755", 8))
+  check("…or with one that starts but cannot run the hook", refused(bin .. "/not-node", "cannot run"))
+  local node = vim.fn.exepath("node")
+  if node ~= "" then
+    local err = h.preflight(vim.tbl_extend("force", o, { node = node }))
+    check("a node that runs the hook is accepted", err == nil, err)
+  end
+  vim.env.PATH = path
+end
 
 vim.env.CLAUDECODE = "1"
 local env = h.env(o)

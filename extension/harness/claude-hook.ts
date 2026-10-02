@@ -185,6 +185,18 @@ function afterWrite(target: string): string {
   return `[fieldguide] verify unavailable: ${(res.stderr || "").trim() || res.error?.message || `exit ${res.status}`}`;
 }
 
+/** Whether a PostToolUse event reports a write that happened. */
+function wrote(ev: HookEvent): boolean {
+  if (ev.hook_event_name && ev.hook_event_name !== "PostToolUse") return false;
+  const res = ev.tool_response;
+  if (typeof res === "string") return !/^\s*(<tool_use_error>|error)/i.test(res);
+  if (res && typeof res === "object") {
+    const r = res as Record<string, unknown>;
+    if (r.is_error === true || r.success === false || (typeof r.error === "string" && r.error !== "")) return false;
+  }
+  return true;
+}
+
 function deny(reason: string): object {
   return {
     hookSpecificOutput: {
@@ -223,6 +235,10 @@ async function pre(ev: HookEvent): Promise<object | null> {
 async function post(ev: HookEvent): Promise<object | null> {
   const { zones, verbs } = env();
   if (!WRITE_TOOLS.has(ev.tool_name ?? "") || !verbs.has("verify")) return null;
+  // A write that did not land has nothing to checkpoint or verify. Claude
+  // 2.1 sends those as PostToolUseFailure, which is not registered, but a
+  // failure that arrives here anyway is skipped rather than trusted.
+  if (!wrote(ev)) return null;
   const cwd = ev.cwd || process.cwd();
   const raw = firstPath(ev.tool_input ?? {});
   if (!raw) return null;
@@ -241,6 +257,12 @@ async function post(ev: HookEvent): Promise<object | null> {
 }
 
 async function main(mode: string): Promise<void> {
+  // Launch-time proof that this interpreter can run this file: TypeScript
+  // stripped, every import resolved. Reads no input, so preflight can call it.
+  if (mode === "check") {
+    process.stdout.write("ok\n");
+    return;
+  }
   let ev: HookEvent;
   try {
     ev = JSON.parse(readFileSync(0, "utf8")) as HookEvent;

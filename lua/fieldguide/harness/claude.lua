@@ -129,6 +129,12 @@ local function node_bin(o)
   return node ~= "" and node or nil
 end
 
+---@param o fieldguide.HarnessOpts
+---@return string
+local function hook_path(o)
+  return o.root .. "/extension/harness/claude-hook.ts"
+end
+
 ---Launch-time problems, said before a process is spawned.
 ---@param o fieldguide.HarnessOpts
 ---@return string? error
@@ -136,8 +142,19 @@ function M.preflight(o)
   if vim.fn.executable("claude") == 0 then
     return '"claude" is not on PATH'
   end
-  if not node_bin(o) then
+  local node = node_bin(o)
+  if not node then
     return "node is not on PATH, and Claude's hooks — the path gate — run on it"
+  end
+  -- A path is not proof. The hook itself is run, the way Claude will run it:
+  -- a node that is missing, too old to strip TypeScript, or cannot resolve
+  -- the hook's imports fails here, before any tool can run ungated.
+  local ok, r = pcall(function()
+    return vim.system({ node, hook_path(o), "check" }, { text = true }):wait(10000)
+  end)
+  if not ok or r.code ~= 0 or vim.trim(r.stdout or "") ~= "ok" then
+    local why = not ok and tostring(r) or vim.trim((r.stderr ~= "" and r.stderr) or ("exit " .. tostring(r.code)))
+    return ("%s cannot run Claude's hook — the path gate — so Claude is not started: %s"):format(node, why)
   end
   return nil
 end
@@ -146,7 +163,7 @@ end
 ---@return table settings as Claude reads them
 function M.settings(o)
   local node = vim.fn.shellescape(node_bin(o) or "node")
-  local hook = vim.fn.shellescape(o.root .. "/extension/harness/claude-hook.ts")
+  local hook = vim.fn.shellescape(hook_path(o))
 
   -- Reads of the doc zone are outside cwd, where Claude would otherwise ask —
   -- and in -p mode, asking means refusing. `//` is Claude's spelling of an
