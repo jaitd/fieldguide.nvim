@@ -23,6 +23,7 @@ lefthook = "latest"
 description = "The whole suite, most security-relevant first"
 depends = [
   "test:gate",
+  "test:sandbox",
   "test:extension",
   "test:mcp",
   "test:plugins",
@@ -43,6 +44,10 @@ depends = [
 [tasks."test:gate"]
 description = "Three-zone path gate table"
 run = "node --test tests/gate.test.ts"
+
+[tasks."test:sandbox"]
+description = "The agent sandbox — only the zones are in reach, from inside it"
+run = "nvim -l tests/sandbox.lua"
 
 [tasks."test:extension"]
 description = "pi extension loads, registers the verbs, wires the hooks"

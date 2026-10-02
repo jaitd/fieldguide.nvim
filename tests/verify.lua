@@ -288,6 +288,34 @@ do
   )
 end
 
+-- 13. Data, state and cache under /tmp — a CI runner, a throwaway
+--     NVIM_APPNAME, a test harness. The boot's own /tmp is a tmpfs, and a
+--     mount laid down before it is hidden by it: plugins vanish, and a state
+--     dir that does not exist yet cannot even be created under the read-only
+--     root. The config here fails its boot if it cannot see the data dir.
+if verify.sandbox() == "bwrap" then
+  local base = vim.fn.tempname()
+  vim.fn.mkdir(base .. "/cfg", "p")
+  vim.fn.mkdir(base .. "/data/nvim", "p")
+  base = vim.uv.fs_realpath(base)
+  vim.fn.writefile({ "marker" }, base .. "/data/nvim/marker")
+  vim.fn.writefile({
+    'assert(vim.uv.fs_stat(vim.fn.stdpath("data") .. "/marker"), "the data dir is hidden")',
+  }, base .. "/cfg/init.lua")
+
+  local saved = { vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME, vim.env.XDG_CACHE_HOME }
+  vim.env.XDG_DATA_HOME = base .. "/data"
+  vim.env.XDG_STATE_HOME = base .. "/state"
+  vim.env.XDG_CACHE_HOME = base .. "/cache"
+  cfg.setup({ cwd = base .. "/cfg" })
+  verify.last = nil
+  local r = verify.run({})
+  vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME, vim.env.XDG_CACHE_HOME = saved[1], saved[2], saved[3]
+
+  check("xdg dirs under /tmp: boot ok", r.ok == true, tostring(r.error) .. " " .. joined(r.errors))
+  vim.fn.delete(base, "rf")
+end
+
 cfg.setup({})
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))
