@@ -430,6 +430,13 @@ check(
   pre.hooks[1].command
 )
 check("…on an absolute node", vim.startswith(pre.hooks[1].command, "'/"), pre.hooks[1].command)
+do
+  -- The gate's command as Claude runs it, with a node that cannot start: a
+  -- non-blocking error would let the tool run ungated; exit 2 refuses it.
+  local broken = h.settings(vim.tbl_extend("force", o, { node = scratch .. "/gone/node" }))
+  local r = vim.system({ "sh", "-c", broken.hooks.PreToolUse[1].hooks[1].command }, { stdin = "{}" }):wait(10000)
+  check("a gate that cannot start blocks the tool (exit 2)", r.code == 2, vim.inspect(r))
+end
 check("verify runs after writes", settings.hooks.PostToolUse[1].hooks[1].command:find("' post", 1, true) ~= nil)
 check(
   "the doc zone is readable without a prompt nobody would see",
@@ -500,6 +507,16 @@ check(
   tostring(env.CLAUDE_CONFIG_DIR)
 )
 check("…and it is what the sandbox binds", vim.tbl_contains(h.needs().rw, env.CLAUDE_CONFIG_DIR))
+-- Not /tmp/claude-<uid>, which every other Claude session of the user's uses.
+check(
+  "Claude's temp dir is our own, and bound writable",
+  vim.startswith(env.CLAUDE_CODE_TMPDIR or "", h.dir()) and vim.tbl_contains(h.needs().rw, env.CLAUDE_CODE_TMPDIR),
+  tostring(env.CLAUDE_CODE_TMPDIR)
+)
+check(
+  "the launch is by the binary's real path, not a PATH link",
+  h.argv(o)[1] == vim.uv.fs_realpath(vim.fn.exepath("claude")) or vim.fn.executable("claude") == 0
+)
 
 for k, v in pairs(saved) do
   vim.env[k] = v

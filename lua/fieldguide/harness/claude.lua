@@ -105,6 +105,14 @@ function M.dir()
   return ("%s/fieldguide/harness/claude/%d"):format(vim.fn.stdpath("state"), vim.fn.getpid())
 end
 
+---Claude's temp dir for this editor's sessions, inside `M.dir()`.
+---@return string
+function M.tmpdir()
+  local dir = M.dir() .. "/tmp"
+  vim.fn.mkdir(dir, "p")
+  return dir
+end
+
 ---Directories left behind by editors that are no longer running.
 local function prune(parent)
   for name, kind in vim.fs.dir(parent) do
@@ -125,8 +133,13 @@ local function node_bin(o)
   -- The hook's interpreter, by absolute path. A hook command that fails to
   -- start is a non-blocking error to Claude — the tool runs ungated — so this
   -- is resolved here, where a missing node can stop the launch instead.
+  -- Resolved, as the sandbox binds it: a version manager's `node/24` is a
+  -- link to `node/24.x.y`, and inside an agent sandbox only the target exists.
   local node = o.node or vim.fn.exepath("node")
-  return node ~= "" and node or nil
+  if node == "" then
+    return nil
+  end
+  return real(node) or node
 end
 
 ---@param o fieldguide.HarnessOpts
@@ -182,7 +195,10 @@ function M.settings(o)
           matcher = "*",
           -- A timed-out hook is a non-blocking error too. Generous, because the
           -- pre-write step checkpoints through the editor.
-          hooks = { { type = "command", command = ("%s %s pre"):format(node, hook), timeout = 60 } },
+          -- `|| exit 2` makes any failure to run the gate a refusal: exit 2 is
+          -- the one code Claude treats as blocking, and a node that cannot
+          -- start, inside a sandbox preflight never saw, exits 126 or 127.
+          hooks = { { type = "command", command = ("%s %s pre || exit 2"):format(node, hook), timeout = 60 } },
         },
       },
       PostToolUse = {
@@ -237,7 +253,10 @@ function M.argv(o)
   write_json(mcp, M.mcp_config(o))
 
   local argv = {
-    "claude",
+    -- By its real path: the name on PATH is usually a symlink in ~/.local/bin,
+    -- which an agent sandbox does not bind, and the versions directory it
+    -- points into is what `needs()` does.
+    real(vim.fn.exepath("claude")) or "claude",
     "-p",
     "--input-format",
     "stream-json",
@@ -289,6 +308,9 @@ function M.env(_)
   for _, name in ipairs(M.inherited) do
     env[name] = ""
   end
+  -- Claude's scratch space, which is otherwise /tmp/claude-<uid>: shared with
+  -- every other Claude session of the user's, and not ours to put in reach.
+  env.CLAUDE_CODE_TMPDIR = M.tmpdir()
   if M.auth() == "token" then
     local home = M.claude_home()
     vim.fn.mkdir(home, "p")
@@ -313,6 +335,9 @@ function M.needs()
   add(ro, bin and vim.fs.dirname(bin) or nil)
   local node = real(vim.fn.exepath("node"))
   add(ro, node and vim.fs.dirname(vim.fs.dirname(node)) or nil)
+  -- Created here too: the sandbox is planned before or after argv() writes
+  -- into it, and a zone that does not exist yet would be dropped.
+  vim.fn.mkdir(M.dir(), "p")
   add(ro, M.dir())
 
   -- Writable, not because the agent writes there but because Claude does:
@@ -330,6 +355,14 @@ function M.needs()
     -- sandbox and the session carries on without it.
     add(rw, vim.fs.normalize("~/.claude.json"))
   end
+  if M.auth() == "login" and vim.uv.os_uname().sysname == "Darwin" then
+    -- On macOS a login lives in the Keychain, which Claude's process opens
+    -- itself: without the keychain files it reports "Not logged in". Read
+    -- only. Anything else in there is still behind the Keychain's own
+    -- per-item access control.
+    add(ro, vim.fs.normalize("~/Library/Keychains"))
+  end
+  add(rw, M.tmpdir())
   add(rw, vim.fs.normalize("~/.cache/claude"))
   add(rw, vim.fs.normalize("~/.local/state/claude"))
   return { ro = ro, rw = rw }
