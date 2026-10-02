@@ -317,7 +317,8 @@ function renderers.edit(event)
     for _, line in ipairs(vim.split(diff, "\n", { plain = true })) do
       if line ~= "" then
         table.insert(body, "  " .. line)
-        local sign = line:match("^([+-])%d")
+        -- Numbers are padded to one width: `+ 9` and `+10` are both changes.
+        local sign = line:match("^([+-]) *%d")
         if sign == "+" then
           added = added + 1
         elseif sign == "-" then
