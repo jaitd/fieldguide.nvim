@@ -282,8 +282,15 @@ local function from_inside(which)
   r = inside(("%q --headless --clean --server %q --remote-expr '1+1'"):format(cfg.paths().nvim_bin, mcp_sock))
   check("the MCP server's socket is the one way to the tools", vim.trim(r.stdout or "") == "2", vim.inspect(r))
 
-  r = inside("ls " .. home)
-  check("$HOME cannot be listed", r.code ~= 0 and not (r.stdout or ""):find("%S"), vim.inspect(r))
+  -- Under bwrap $HOME is a tmpfs holding only the mount points of the zones;
+  -- under seatbelt listing it is refused. Either way, every name that shows
+  -- leads to something the plan put there.
+  r = inside("ls -A " .. home)
+  local plan = table.concat(argv, " ")
+  local strays = vim.tbl_filter(function(name)
+    return not plan:find(home .. "/" .. name, 1, true)
+  end, vim.split(vim.trim(r.stdout or ""), "\n", { trimempty = true }))
+  check("$HOME shows nothing but the way to the zones", #strays == 0, vim.inspect(strays))
 
   -- Seatbelt has no PID namespace; see `agent_seatbelt`.
   if which == "bwrap" then
