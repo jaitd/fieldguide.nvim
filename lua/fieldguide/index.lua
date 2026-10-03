@@ -15,16 +15,16 @@ local env = require("fieldguide.env")
 
 local M = {}
 
-local running = false
----Whoever is waiting for the fetch in progress to be over.
----@type fun()[]
-local waiting = {}
+---The fetch in progress, and whoever is waiting for it. Each fetch has its
+---own: a waiter is only ever released by the fetch it waited on, never by
+---one that ended as it was being asked.
+---@type { waiters: fun()[] }?
+local current
 
----The fetch is over, however it went: everyone waiting on it is told.
-local function release()
-  local was = waiting
-  waiting = {}
-  for _, fn in ipairs(was) do
+---A fetch is over, however it went: everyone waiting on it is told.
+---@param run { waiters: fun()[] }
+local function release(run)
+  for _, fn in ipairs(run.waiters) do
     fn()
   end
 end
@@ -55,12 +55,10 @@ end
 ---@param opts? { quiet?: boolean, max_age_days?: integer, on_done?: fun() }
 function M.fetch(opts)
   opts = opts or {}
-  if opts.on_done then
-    table.insert(waiting, opts.on_done)
-  end
   -- Two concurrent fetches would race on the same staging file. The second one
-  -- is never the interesting one.
-  if running then
+  -- is never the interesting one, and waits on the first.
+  if current then
+    table.insert(current.waiters, opts.on_done)
     if not opts.quiet then
       vim.notify("fieldguide: an index fetch is already running", vim.log.levels.INFO)
     end
@@ -78,20 +76,26 @@ function M.fetch(opts)
     table.insert(argv, cfg.options.index.repo)
   end
 
+  local run = { waiters = { opts.on_done } }
+
   -- vim.system raises synchronously when the executable is missing. Under
-  -- `index.auto` that would be a startup error out of setup(); and `running`
-  -- is claimed only once the process exists, so a failure to start does not
+  -- `index.auto` that would be a startup error out of setup(); and the fetch
+  -- is current only once the process exists, so a failure to start does not
   -- refuse every later :FieldguideIndex as "already running".
   local started, err = pcall(vim.system, argv, { text = true }, function(res)
-    running = false
     vim.schedule(function()
+      -- On the main loop, in the same step as the release: a fetch asked
+      -- before this point still finds this one current and waits on it.
+      if current == run then
+        current = nil
+      end
       local ok, outcome = pcall(vim.json.decode, res.stdout or "")
       if not ok or type(outcome) ~= "table" then
         if not opts.quiet then
           local why = (res.stderr or ""):gsub("%s+$", "")
           vim.notify("fieldguide: index fetch failed — " .. (why ~= "" and why or "no output"), vim.log.levels.WARN)
         end
-        release()
+        release(run)
         return
       end
       local msg, level = describe(outcome)
@@ -101,17 +105,17 @@ function M.fetch(opts)
       if not (opts.quiet and outcome.status ~= "installed") then
         vim.notify("fieldguide: " .. msg, level)
       end
-      release()
+      release(run)
     end)
   end)
   if not started then
     if not opts.quiet then
       vim.notify("fieldguide: cannot fetch the index — " .. tostring(err), vim.log.levels.WARN)
     end
-    release()
+    release(run)
     return
   end
-  running = true
+  current = run
   if not opts.quiet then
     vim.notify("fieldguide: fetching the plugin index…", vim.log.levels.INFO)
   end

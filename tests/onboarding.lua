@@ -323,6 +323,52 @@ do
   vim.env.PATH = path
 end
 
+io.write("a fetch that ends as another is asked\n")
+do
+  -- The process's exit and the main loop's turn are moments apart. A fetch
+  -- asked in between must not be released by the one that just ended while a
+  -- download of its own is still going.
+  local index = require("fieldguide.index")
+  local system = vim.system
+  local exits = {}
+  vim.system = function(_, _, on_exit)
+    table.insert(exits, on_exit)
+    return {}
+  end
+  local a_done, b_done = false, false
+  index.fetch({
+    quiet = true,
+    on_done = function()
+      a_done = true
+    end,
+  })
+  -- A's process exits: libuv calls back at once, off the main loop.
+  exits[1]({ code = 0, stdout = '{"status":"current"}', stderr = "" })
+  index.fetch({
+    quiet = true,
+    on_done = function()
+      b_done = true
+    end,
+  })
+  vim.wait(200, function()
+    return a_done
+  end, 10)
+  local own = exits[2]
+  check(
+    "a waiter is never released while a download it waits on is going",
+    a_done and (own == nil and b_done or (own ~= nil and not b_done)),
+    vim.inspect({ a_done = a_done, b_done = b_done, spawned = #exits })
+  )
+  if own then
+    own({ code = 0, stdout = '{"status":"current"}', stderr = "" })
+    vim.wait(200, function()
+      return b_done
+    end, 10)
+  end
+  check("...and is released once it is over", b_done)
+  vim.system = system
+end
+
 io.write("pi's model list\n")
 do
   local real_models = require("fieldguide.harness.pi").models
