@@ -15,11 +15,11 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { after, before, describe, test } from "node:test";
 
-import { decide, DENY_PREFIX, patternRoot, type HookEvent } from "../extension/harness/claude-hook.ts";
+import { decide, DENY_PREFIX, patternRoot, type HookEvent } from "../extension/harness/claude/hook.ts";
 import type { Zones } from "../extension/gate.ts";
 
 const REPO = path.resolve(import.meta.dirname, "..");
-const HOOK = path.join(REPO, "extension/harness/claude-hook.ts");
+const HOOK = path.join(REPO, "extension/harness/claude/hook.ts");
 
 //   root/
 //     config/            <- config zone (rw); cwd
@@ -180,13 +180,13 @@ describe("the hook process", () => {
     let tree: string;
     before(async () => {
       tree = path.join(root, "plugin");
-      await mkdir(path.join(tree, "extension/harness"), { recursive: true });
+      await mkdir(path.join(tree, "extension/harness/claude"), { recursive: true });
       await copyFile(path.join(REPO, "extension/gate.ts"), path.join(tree, "extension/gate.ts"));
-      await copyFile(HOOK, path.join(tree, "extension/harness/claude-hook.ts"));
+      await copyFile(HOOK, path.join(tree, "extension/harness/claude/hook.ts"));
       await copyFile(path.join(REPO, "extension/harness/write-hooks.ts"), path.join(tree, "extension/harness/write-hooks.ts"));
     });
 
-    const hook = () => path.join(tree, "extension/harness/claude-hook.ts");
+    const hook = () => path.join(tree, "extension/harness/claude/hook.ts");
     const writeEvent = (file_path: string) => JSON.stringify(ev("Write", { file_path, content: "x" }));
     const decision = (stdout: string) => (stdout ? JSON.parse(stdout).hookSpecificOutput.permissionDecision : "none");
 
@@ -234,7 +234,7 @@ describe("the hook process", () => {
 
     test("says so when the server is missing, rather than staying quiet", async () => {
       await rm(path.join(tree, "extension/mcp.ts"), { force: true });
-      const res = runHook(path.join(tree, "extension/harness/claude-hook.ts"), "post", postEvent("init.lua"));
+      const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua"));
       assert.equal(res.status, 0, res.stderr);
       const out = JSON.parse(res.stdout);
       assert.match(out.hookSpecificOutput.additionalContext, /verify unavailable/);
@@ -245,7 +245,7 @@ describe("the hook process", () => {
         path.join(tree, "extension/mcp.ts"),
         `if (process.argv[2] === "--after-write") console.log("[fieldguide] boot OK, 7ms for " + process.argv[3]);\n`,
       );
-      const res = runHook(path.join(tree, "extension/harness/claude-hook.ts"), "post", postEvent("init.lua", "toolu_X"));
+      const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua", "toolu_X"));
       assert.equal(res.status, 0, res.stderr);
       const out = JSON.parse(res.stdout);
       const expected = `[fieldguide] boot OK, 7ms for ${path.join(zones.configRoot, "init.lua")}`;
@@ -256,20 +256,20 @@ describe("the hook process", () => {
 
     test("empty output from the server attaches nothing", async () => {
       await writeFile(path.join(tree, "extension/mcp.ts"), `process.exit(0);\n`);
-      const res = runHook(path.join(tree, "extension/harness/claude-hook.ts"), "post", postEvent("init.lua"));
+      const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua"));
       assert.equal(res.status, 0, res.stderr);
       assert.equal(res.stdout, "");
     });
 
     test("a server that fails is reported, not swallowed", async () => {
       await writeFile(path.join(tree, "extension/mcp.ts"), `console.error("socket gone"); process.exit(1);\n`);
-      const res = runHook(path.join(tree, "extension/harness/claude-hook.ts"), "post", postEvent("init.lua"));
+      const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua"));
       assert.match(JSON.parse(res.stdout).hookSpecificOutput.additionalContext, /verify unavailable: socket gone/);
     });
 
     test("a write outside the config zone is not verified", () => {
       const res = runHook(
-        path.join(tree, "extension/harness/claude-hook.ts"),
+        path.join(tree, "extension/harness/claude/hook.ts"),
         "post",
         postEvent(path.join(zones.docRoots[0], "doc/x.txt")),
       );
@@ -299,7 +299,7 @@ describe("the hook process", () => {
     });
 
     test("nothing to verify when verify is not an enabled verb", () => {
-      const res = runHook(path.join(tree, "extension/harness/claude-hook.ts"), "post", postEvent("init.lua"), {
+      const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua"), {
         FIELDGUIDE_VERBS: "state",
       });
       assert.equal(res.stdout, "");

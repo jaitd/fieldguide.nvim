@@ -1,18 +1,19 @@
 // The three-zone gate, in opencode v2's vocabulary.
 //
-// `checkAccess` in ../gate.ts is the decision and stays the only one. This file
-// translates opencode's tools and arguments into pi's, and handles what pi's
-// tools never needed: paths carried inside a patch body and inside a glob
-// pattern. Kept apart from the plugin itself because opencode calls every
-// function a plugin module exports as a plugin, and these are not.
+// `checkAccess` in ../../gate.ts is the decision and stays the only one. This
+// file translates opencode's tools and arguments into pi's, and handles what
+// pi's tools never needed: paths carried inside a patch body and inside a glob
+// pattern. Kept apart from the plugin (./plugin.ts) so the decision can be
+// tested without one; opencode v2 loads only this directory's index.js, which
+// names the plugin, so nothing here is mistaken for a plugin.
 //
 // Everything here fails closed. A tool not named below, an argument of the
 // wrong type, a patch that does not parse: all are refused, because the
 // alternative is a gate that opens whenever opencode renames something.
 
 import * as path from "node:path";
-import { checkAccess, type Decision, type Zones } from "../gate.ts";
-import { patchPaths } from "./patch.ts";
+import { checkAccess, type Decision, type Zones } from "../../gate.ts";
+import { patchPaths } from "../patch.ts";
 
 export { patchPaths };
 

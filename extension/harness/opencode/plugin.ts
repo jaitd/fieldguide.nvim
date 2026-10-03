@@ -1,6 +1,6 @@
 // fieldguide's opencode plugin: the pi extension's hooks, on opencode v2's.
 //
-//   execute.before  the three-zone gate (../opencode-gate.ts), then for a write,
+//   execute.before  the three-zone gate (./gate.ts), then for a write,
 //                   `mcp.ts --before-write`: pi's own pre-write gate and
 //                   checkpoint, so undo means the same thing here
 //   execute.after   `mcp.ts --after-write`: checkpoint and verify, with the
@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { decide } from "../opencode-gate.ts";
+import { decide } from "./gate.ts";
 
 const MCP = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "mcp.ts");
 

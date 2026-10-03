@@ -90,7 +90,7 @@ do
   local pre, post = config(argv, "hooks.PreToolUse") or "", config(argv, "hooks.PostToolUse") or ""
   check(
     "the gate runs before every tool",
-    pre:find("codex-hook.ts", 1, true) and pre:find(" pre ", 1, true) and pre:find('matcher=".*"', 1, true),
+    pre:find("codex/hook.ts", 1, true) and pre:find(" pre ", 1, true) and pre:find('matcher=".*"', 1, true),
     pre
   )
   check("...and a gate that cannot start blocks", pre:find("|| exit 2", 1, true) ~= nil, pre)
@@ -99,13 +99,13 @@ do
   local stop = config(argv, "hooks.Stop") or ""
   check(
     "and once more at the end of each turn, never blocking the stop",
-    stop:find("codex-hook.ts' stop\"", 1, true) ~= nil and stop:find("|| exit 2", 1, true) == nil,
+    stop:find("codex/hook.ts' stop\"", 1, true) ~= nil and stop:find("|| exit 2", 1, true) == nil,
     stop
   )
   local ups = config(argv, "hooks.UserPromptSubmit") or ""
   check(
     "and at the start of each prompt, never dropping it",
-    ups:find("codex-hook.ts' prompt\"", 1, true) ~= nil and ups:find("|| exit 2", 1, true) == nil,
+    ups:find("codex/hook.ts' prompt\"", 1, true) ~= nil and ups:find("|| exit 2", 1, true) == nil,
     ups
   )
   check(

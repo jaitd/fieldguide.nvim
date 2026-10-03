@@ -25,7 +25,7 @@ M.name = "claude"
 M.protocol = "claude"
 
 -- Only the tools the gate has a translation for. Anything added here needs a
--- row in extension/harness/claude-hook.ts first, or the hook denies it.
+-- row in extension/harness/claude/hook.ts first, or the hook denies it.
 M.tools = { "Read", "Edit", "Write", "Grep", "Glob" }
 
 ---@param p string?
@@ -145,7 +145,7 @@ end
 ---@param o fieldguide.HarnessOpts
 ---@return string
 local function hook_path(o)
-  return o.root .. "/extension/harness/claude-hook.ts"
+  return o.root .. "/extension/harness/claude/hook.ts"
 end
 
 ---Launch-time problems, said before a process is spawned.
@@ -200,7 +200,7 @@ function M.settings(o)
           -- start, inside a sandbox preflight never saw, exits 126 or 127.
           -- A timed-out hook is a non-blocking error too, so Claude's limit is
           -- the outermost of the chain: the checkpoint verb (60s), mcp.ts
-          -- --before-write waiting on it (75s), claude-hook.ts waiting on
+          -- --before-write waiting on it (75s), the hook waiting on
           -- that (80s), and this. Each gives up after the one inside it, so
           -- the refusal comes from the hook, not from a timeout.
           hooks = { { type = "command", command = ("%s %s pre || exit 2"):format(node, hook), timeout = 90 } },

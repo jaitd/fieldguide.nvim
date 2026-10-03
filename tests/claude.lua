@@ -426,7 +426,7 @@ check("the settings file is ours, under state", vim.startswith(flag("--settings"
 local pre = settings.hooks.PreToolUse[1]
 check(
   "the gate runs before every tool",
-  pre.matcher == "*" and pre.hooks[1].command:find("claude-hook.ts' pre", 1, true) ~= nil,
+  pre.matcher == "*" and pre.hooks[1].command:find("claude/hook.ts' pre", 1, true) ~= nil,
   pre.hooks[1].command
 )
 check("…on an absolute node", vim.startswith(pre.hooks[1].command, "'/"), pre.hooks[1].command)
@@ -468,7 +468,7 @@ end
 
 -- Claude reads a hook that times out as a non-blocking error, so its limits
 -- are the outermost of the chain: past mcp.ts's 75s and 135s waits on the
--- server, and past claude-hook.ts's 80s and 140s waits on mcp.ts.
+-- server, and past the hook's 80s and 140s waits on mcp.ts.
 check("Claude waits out the pre-write chain", pre.hooks[1].timeout >= 90, tostring(pre.hooks[1].timeout))
 check(
   "…and the post-write one",

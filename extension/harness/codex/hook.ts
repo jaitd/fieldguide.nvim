@@ -1,9 +1,9 @@
 // Codex's side of the path gate: a PreToolUse / PostToolUse command hook.
 //
-//   node extension/harness/codex-hook.ts pre    < hook event on stdin
-//   node extension/harness/codex-hook.ts post   < hook event on stdin
-//   node extension/harness/codex-hook.ts stop   < Stop event on stdin
-//   node extension/harness/codex-hook.ts prompt < UserPromptSubmit event on stdin
+//   node extension/harness/codex/hook.ts pre    < hook event on stdin
+//   node extension/harness/codex/hook.ts post   < hook event on stdin
+//   node extension/harness/codex/hook.ts stop   < Stop event on stdin
+//   node extension/harness/codex/hook.ts prompt < UserPromptSubmit event on stdin
 //
 // Codex has no file tools of its own beyond `apply_patch`: it reads, and can
 // write, through its shell, and a hook sees a shell call only as a command
@@ -29,9 +29,9 @@
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkAccess, isUnder, resolveTarget, type Decision, type Zones } from "../gate.ts";
-import { patchPaths } from "./patch.ts";
-import { afterWrite, beforeWrite, hookEnv, treeAfter, treeBefore } from "./write-hooks.ts";
+import { checkAccess, isUnder, resolveTarget, type Decision, type Zones } from "../../gate.ts";
+import { patchPaths } from "../patch.ts";
+import { afterWrite, beforeWrite, hookEnv, treeAfter, treeBefore } from "../write-hooks.ts";
 
 export const MCP_PREFIX = "mcp__fieldguide__";
 
@@ -230,7 +230,7 @@ async function main(mode: string): Promise<void> {
       );
     }
   } else {
-    process.stderr.write(`codex-hook: unknown mode ${mode}\n`);
+    process.stderr.write(`codex hook: unknown mode ${mode}\n`);
     process.exit(2);
   }
 }
