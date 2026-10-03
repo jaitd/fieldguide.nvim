@@ -451,6 +451,32 @@ local mcp = vim.json.decode(table.concat(vim.fn.readfile(flag("--mcp-config")), 
 check("the MCP server gets the editor's environment", mcp.mcpServers.fieldguide.env.FIELDGUIDE_ADDR == "/sock")
 
 do
+  -- Sandboxed: the server runs outside on a socket, and Claude gets the relay.
+  local so = vim.tbl_extend("force", o, { mcp_socket = "/run/fg/mcp.sock" })
+  local relay = h.mcp_config(so).mcpServers.fieldguide
+  check(
+    "with a socket, Claude's MCP server is the relay to it",
+    relay.args[2] == "--relay" and relay.args[3] == "/run/fg/mcp.sock" and relay.args[1]:find("mcp.ts$") ~= nil,
+    vim.inspect(relay)
+  )
+  check("…which is handed none of the editor's variables", vim.tbl_isempty(relay.env), vim.inspect(relay.env))
+  local senv = h.env(so)
+  check("the write hooks are pointed at the socket", senv.FIELDGUIDE_MCP_SOCKET == "/run/fg/mcp.sock")
+  check("and nothing in Claude's tree gets the editor's address", senv.FIELDGUIDE_ADDR == "")
+  check("without a socket, neither is set", h.env(o).FIELDGUIDE_MCP_SOCKET == nil and h.env(o).FIELDGUIDE_ADDR == nil)
+end
+
+-- Claude reads a hook that times out as a non-blocking error, so its limits
+-- are the outermost of the chain: past mcp.ts's 75s and 135s waits on the
+-- server, and past claude-hook.ts's 80s and 140s waits on mcp.ts.
+check("Claude waits out the pre-write chain", pre.hooks[1].timeout >= 90, tostring(pre.hooks[1].timeout))
+check(
+  "…and the post-write one",
+  settings.hooks.PostToolUse[1].hooks[1].timeout >= 150,
+  tostring(settings.hooks.PostToolUse[1].hooks[1].timeout)
+)
+
+do
   -- A stand-in `claude` on PATH, so each refusal below is about node and not
   -- about a machine without Claude installed.
   local bin = scratch .. "/bin"

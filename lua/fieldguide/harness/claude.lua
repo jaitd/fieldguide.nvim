@@ -198,13 +198,19 @@ function M.settings(o)
           -- `|| exit 2` makes any failure to run the gate a refusal: exit 2 is
           -- the one code Claude treats as blocking, and a node that cannot
           -- start, inside a sandbox preflight never saw, exits 126 or 127.
-          hooks = { { type = "command", command = ("%s %s pre || exit 2"):format(node, hook), timeout = 60 } },
+          -- A timed-out hook is a non-blocking error too, so Claude's limit is
+          -- the outermost of the chain: the checkpoint verb (60s), mcp.ts
+          -- --before-write waiting on it (75s), claude-hook.ts waiting on
+          -- that (80s), and this. Each gives up after the one inside it, so
+          -- the refusal comes from the hook, not from a timeout.
+          hooks = { { type = "command", command = ("%s %s pre || exit 2"):format(node, hook), timeout = 90 } },
         },
       },
       PostToolUse = {
         {
           matcher = "Write|Edit|MultiEdit|NotebookEdit",
-          hooks = { { type = "command", command = ("%s %s post"):format(node, hook), timeout = 120 } },
+          -- The same chain for checkpoint plus verify: 120s, 135s, 140s, and this.
+          hooks = { { type = "command", command = ("%s %s post"):format(node, hook), timeout = 150 } },
         },
       },
     },
@@ -217,9 +223,25 @@ function M.settings(o)
   }
 end
 
+---With `o.mcp_socket`, the server runs outside the agent sandbox (`mcp.ts
+-----listen`, started by the editor) and Claude gets the relay: stdio to that
+---socket and nothing else, needing none of the editor's variables. Without
+---one, `o.mcp` is the server itself, run by Claude with the editor's address.
 ---@param o fieldguide.HarnessOpts
 ---@return table
 function M.mcp_config(o)
+  if o.mcp_socket then
+    return {
+      mcpServers = {
+        fieldguide = {
+          type = "stdio",
+          command = node_bin(o) or "node",
+          args = { o.root .. "/extension/mcp.ts", "--relay", o.mcp_socket },
+          env = vim.empty_dict(),
+        },
+      },
+    }
+  end
   local mcp = o.mcp or {}
   return {
     mcpServers = {
@@ -294,9 +316,9 @@ function M.argv(o)
   return argv
 end
 
----@param _ fieldguide.HarnessOpts
+---@param o fieldguide.HarnessOpts
 ---@return table<string, string>
-function M.env(_)
+function M.env(o)
   local env = {
     -- An update swapping the binary out from under a running session, from a
     -- process the user did not start, is not ours to allow.
@@ -311,6 +333,13 @@ function M.env(_)
   -- Claude's scratch space, which is otherwise /tmp/claude-<uid>: shared with
   -- every other Claude session of the user's, and not ours to put in reach.
   env.CLAUDE_CODE_TMPDIR = M.tmpdir()
+  if o.mcp_socket then
+    -- The write hooks ask the server on this socket rather than the editor,
+    -- and nothing in Claude's process tree is handed the editor's address:
+    -- inside the sandbox it would not reach, and outside it is not needed.
+    env.FIELDGUIDE_MCP_SOCKET = o.mcp_socket
+    env.FIELDGUIDE_ADDR = ""
+  end
   if M.auth() == "token" then
     local home = M.claude_home()
     vim.fn.mkdir(home, "p")

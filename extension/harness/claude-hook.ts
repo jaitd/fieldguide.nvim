@@ -168,7 +168,10 @@ const SERVER = path.join(ROOT, "extension", "mcp.ts");
  */
 function beforeWrite(target: string): Decision {
   if (!existsSync(SERVER)) return { allow: false, reason: `cannot checkpoint before writing: ${SERVER} is missing` };
-  const res = spawnSync(process.execPath, [SERVER, "--before-write", target], { encoding: "utf8", timeout: 30_000 });
+  // Past mcp.ts's own 75s wait on the server, so its refusal arrives first,
+  // and short of Claude's 90s on this hook. See the hook timeouts in
+  // lua/fieldguide/harness/claude.lua for the whole chain.
+  const res = spawnSync(process.execPath, [SERVER, "--before-write", target], { encoding: "utf8", timeout: 80_000 });
   if (res.status === 0) return { allow: true };
   const why = (res.stderr || "").trim() || res.error?.message || `exit ${res.status ?? res.signal}`;
   return { allow: false, reason: res.status === 2 ? why : `cannot checkpoint before writing: ${why}` };
@@ -180,7 +183,8 @@ function beforeWrite(target: string): Decision {
  */
 function afterWrite(target: string): string {
   if (!existsSync(SERVER)) return `[fieldguide] verify unavailable: ${SERVER} is missing`;
-  const res = spawnSync(process.execPath, [SERVER, "--after-write", target], { encoding: "utf8", timeout: 60_000 });
+  // Past mcp.ts's 135s, short of Claude's 150s.
+  const res = spawnSync(process.execPath, [SERVER, "--after-write", target], { encoding: "utf8", timeout: 140_000 });
   if (res.status === 0) return (res.stdout || "").trim();
   return `[fieldguide] verify unavailable: ${(res.stderr || "").trim() || res.error?.message || `exit ${res.status}`}`;
 }
