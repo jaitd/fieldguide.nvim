@@ -575,6 +575,16 @@ end
 ---question having been swallowed. The reason arrives on both `message_end` and
 ---`turn_end`, so it is announced once.
 ---@param event fieldguide.Event
+---After a refusal for want of a login, which names no way out, say one. The
+---model is the usual cause: an agent's own default can be a provider nobody
+---logged in to.
+---@param why any the agent's words
+local function login_hint(why)
+  if tostring(why or ""):lower():find("authentication required", 1, true) then
+    state.sink:writeln("> the agent has no login for this model's provider: `:FieldguideSetup` picks another model")
+  end
+end
+
 local function report_outcome(event)
   local reason = event.stop_reason
   local text = nil
@@ -598,10 +608,8 @@ local function report_outcome(event)
   local s = state.sink
   s:ensure_newline()
   s:writeln(("> **%s**"):format(text))
-  -- A refusal for want of a login names no way out. The model is the usual
-  -- cause: an agent's own default can be a provider nobody logged in to.
-  if reason == "error" and tostring(event.error or ""):lower():find("authentication required", 1, true) then
-    s:writeln("> the agent has no login for this model's provider: `:FieldguideSetup` picks another model")
+  if reason == "error" then
+    login_hint(event.error)
   end
   set_status("idle")
 end
@@ -666,6 +674,8 @@ local function on_event(event)
     begin_block(nil)
     s:ensure_newline()
     s:writeln(("> **%s error:** %s"):format(event.source or "agent", tostring(event.message)))
+    -- An ACP agent refuses a prompt this way, not as a turn that ended badly.
+    login_hint(event.message)
   elseif k == "exit" then
     begin_block(nil)
     s:ensure_newline()

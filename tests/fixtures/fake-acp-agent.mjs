@@ -13,6 +13,8 @@
 //   FAKE_NO_LOAD=1     advertise no session/load, to exercise the fallback
 //   FAKE_LOAD_FAILS=1  advertise session/load, then reject it
 //   FAKE_NEW_FAILS=1   reject session/new too: no session can be had at all
+//   FAKE_PROMPT_AUTH=1 refuse every prompt as opencode does for a model whose
+//                      provider it has no login for
 
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -141,6 +143,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       emit({ id: m.id, result: null });
       break;
     case "session/prompt":
+      if (process.env.FAKE_PROMPT_AUTH) {
+        emit({ id: m.id, error: { code: -32000, message: "Authentication required: provider authentication required" } });
+        break;
+      }
       runPrompt(m.id, m.params.sessionId);
       break;
     case "session/cancel":

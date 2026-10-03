@@ -870,6 +870,22 @@ do
     auth
   )
 
+  -- The way an ACP agent says it: an error event, not a turn that ended badly.
+  chat.stop()
+  chat.start({ argv = { FAKE, "1" }, cwd = root })
+  st = chat._state()
+  -- The transcript runs on across sessions: count only what this one adds.
+  local _, before = transcript():gsub("FieldguideSetup", "")
+  st.session:_emit({
+    kind = "error",
+    source = "agent",
+    message = "Authentication required: provider authentication required",
+    raw = {},
+  })
+  local acp_said = transcript()
+  local _, after = acp_said:gsub("FieldguideSetup", "")
+  check("...and so does an error event saying it, as opencode's arrives", after - before == 1, acp_said)
+
   chat.stop()
   chat.start({ argv = { FAILING, "length" }, cwd = root })
   st = chat._state()
