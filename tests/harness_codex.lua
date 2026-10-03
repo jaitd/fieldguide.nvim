@@ -260,26 +260,29 @@ do
     tostring(h.session_model("t-edge"))
   )
 
-  -- One tool output filling a line of many megabytes, after the latest turn.
-  -- Built up read by read it would be copied again at every read: the time
-  -- would grow with the square of its length, not with its length.
-  local function long_line(mb)
-    local id = ("t-line-%d"):format(mb)
-    local f = assert(io.open(("%s/rollout-2026-10-03T18-02-00-%s.jsonl"):format(dir, id), "w"))
-    f:write(record("turn_context", { model = "before-the-long-line" }), "\n")
-    f:write('{"type":"response_item","payload":{"output":"', string.rep("x", mb * 1024 * 1024), '"}}\n')
-    f:close()
-    local t = vim.uv.hrtime()
-    local model = h.session_model(id)
-    return model, (vim.uv.hrtime() - t) / 1e6
+  -- One tool output filling a line of megabytes, after the latest turn. Built
+  -- up read by read it would be searched again, whole, at every read: work
+  -- growing with the square of its length. Counted, not timed, so a busy
+  -- machine cannot fail it: every byte searched while the model is found.
+  local id = "t-long-line"
+  local path = ("%s/rollout-2026-10-03T18-02-00-%s.jsonl"):format(dir, id)
+  local f = assert(io.open(path, "w"))
+  f:write(record("turn_context", { model = "before-the-long-line" }), "\n")
+  f:write('{"type":"response_item","payload":{"output":"', string.rep("x", 4 * 1024 * 1024), '"}}\n')
+  f:close()
+  local searched, find = 0, string.find
+  string.find = function(str, ...)
+    searched = searched + #str
+    return find(str, ...)
   end
-  local m4, t4 = long_line(4)
-  local m16, t16 = long_line(16)
-  check("a turn before a line of megabytes is found", m4 == "before-the-long-line" and m16 == m4, tostring(m16))
+  local found = h.session_model(id)
+  string.find = find
+  local size = vim.uv.fs_stat(path).size
+  check("a turn before a line of megabytes is found", found == "before-the-long-line", tostring(found))
   check(
-    "...in time that grows with the line, not its square",
-    t16 < 8 * math.max(t4, 2),
-    ("4MB: %.0f ms, 16MB: %.0f ms"):format(t4, t16)
+    "...searching the line about once, not once a read",
+    searched < 4 * size,
+    ("%d bytes searched for a %d-byte file"):format(searched, size)
   )
 end
 
