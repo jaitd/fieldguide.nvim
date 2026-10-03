@@ -96,6 +96,12 @@ do
   check("...and a gate that cannot start blocks", pre:find("|| exit 2", 1, true) ~= nil, pre)
   check("...on an absolute node", pre:find("command=\"'/", 1, true) ~= nil, pre)
   check("checkpoint and verify after every tool", post:find(" post ", 1, true) ~= nil, post)
+  local stop = config(argv, "hooks.Stop") or ""
+  check(
+    "and once more at the end of each turn, never blocking the stop",
+    stop:find("codex-hook.ts' stop\"", 1, true) ~= nil and stop:find("|| exit 2", 1, true) == nil,
+    stop
+  )
   check(
     "Codex waits out the hooks' own waits on the server",
     pre:find("timeout=90", 1, true) and post:find("timeout=150", 1, true),
@@ -144,7 +150,9 @@ do
   check("the write hooks are pointed at the socket", env.FIELDGUIDE_MCP_SOCKET == o.mcp_socket)
   check("and nothing in Codex's tree gets the editor's address", env.FIELDGUIDE_ADDR == "")
   check("a parent Codex session's variables are emptied", env.CODEX_THREAD_ID == "" and env.CODEX_SANDBOX == "")
-  check("the hook has somewhere to keep the tree's fingerprint", env.FIELDGUIDE_HOOK_STATE ~= nil)
+  -- Whether the tree changed is the MCP server's to know: nothing the hook
+  -- could keep inside the sandbox would be out of the agent's reach.
+  check("the hook is given no state of its own to keep", env.FIELDGUIDE_HOOK_STATE == nil)
   -- Codex walks ~/.agents/skills, and its shell is a login shell that reads
   -- ~/.zshrc: a HOME of its own has neither.
   check(
@@ -153,11 +161,6 @@ do
     env.HOME
   )
   check("...which the sandbox lets it write", vim.tbl_contains(h.needs(o).rw, env.HOME))
-
-  -- A login kept in the system keyring is keyed by the home's path.
-  vim.fn.delete(user_home .. "/auth.json")
-  check("with no auth.json, the user's own home", h.env(o).CODEX_HOME == user_home)
-  vim.fn.writefile({ '{"tokens":"t"}' }, user_home .. "/auth.json")
 end
 
 io.write("sandbox needs\n")
@@ -170,7 +173,7 @@ do
     "not the rest of the user's Codex home",
     not vim.tbl_contains(needs.rw, user_home) and not vim.tbl_contains(needs.ro, user_home)
   )
-  check("the hook's state is writable", vim.tbl_contains(needs.rw, h.hook_state()))
+  check("nothing else of fieldguide's is writable to the agent", #needs.rw == 3, vim.inspect(needs.rw))
   local node = vim.uv.fs_realpath(vim.fn.exepath("node"))
   if node then
     check(
@@ -238,6 +241,16 @@ do
     "refused with no sandbox to run in",
     (h.preflight(vim.tbl_extend("force", o, { sandbox = "none" })) or ""):find("not a sandbox", 1, true) ~= nil
   )
+  -- A login in the system keyring is keyed by the home's path: it would need
+  -- the user's whole Codex home in the sandbox, sessions and all.
+  vim.fn.delete(user_home .. "/auth.json")
+  check(
+    "refused with a keyring login, rather than hand over the user's Codex home",
+    (h.preflight(o) or ""):find("auth.json", 1, true) ~= nil,
+    h.preflight(o)
+  )
+  check("...and nothing of that home is put in reach", not vim.tbl_contains(h.needs(o).rw, user_home))
+  vim.fn.writefile({ '{"tokens":"t"}' }, user_home .. "/auth.json")
   local native = vim.uv.fs_realpath("/bin/echo") or "/bin/echo"
   check(
     "refused when the binary cannot say which Codex it is",

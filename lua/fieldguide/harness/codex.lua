@@ -21,7 +21,9 @@
 --   project_doc_max_bytes = 0              no AGENTS.md from the config tree
 --   web_search = "disabled"                no web
 --   hooks (extension/harness/codex-hook.ts) the gate on apply_patch, and
---                                          checkpoint and verify around writes
+--                                          checkpoint and verify around writes,
+--                                          the shell's included, and at the end
+--                                          of each turn
 --   --dangerously-bypass-hook-trust        Codex otherwise runs no hook a person
 --                                          has not reviewed; fieldguide writes
 --                                          these itself
@@ -180,20 +182,19 @@ local function user_home()
   return vim.fs.normalize("~/.codex")
 end
 
----The CODEX_HOME Codex runs with. One of fieldguide's own when the login is
----a file: holding nothing but a link to that file, so the user's global
----AGENTS.md, skills, memories and sessions are not there to be read, and the
----login is not a copy. Codex writes auth.json in place, through the link, so a
----refreshed token lands in the user's file. A login in the system keyring is
----keyed by the home's path, so then the user's own home it has to be.
----@return string home, string? login the user's auth.json, when it is a file
+---The CODEX_HOME Codex runs with: one of fieldguide's own, holding nothing
+---but a link to the user's auth.json, so the user's global AGENTS.md, skills,
+---memories and sessions are not there to be read, and the login is not a
+---copy. Codex writes auth.json in place, through the link, so a refreshed
+---token lands in the user's file.
+---@return string home, string? login the user's auth.json, when there is one
 function M.codex_home()
-  local login = user_home() .. "/auth.json"
-  if not vim.uv.fs_stat(login) then
-    return user_home(), nil
-  end
   local home = M.state_dir() .. "/home"
   vim.fn.mkdir(home, "p")
+  local login = user_home() .. "/auth.json"
+  if not vim.uv.fs_stat(login) then
+    return home, nil
+  end
   local link = home .. "/auth.json"
   if vim.uv.fs_readlink(link) ~= login then
     vim.uv.fs_unlink(link)
@@ -210,12 +211,6 @@ function M.shell_home()
   local dir = M.state_dir() .. "/shell-home"
   vim.fn.mkdir(dir, "p")
   return dir
-end
-
----Where the hook keeps what the config tree looked like between calls.
----@return string
-function M.hook_state()
-  return ("%s/hook/%d"):format(M.state_dir(), vim.fn.getpid())
 end
 
 ---Launch-time problems, said before a process is spawned.
@@ -236,6 +231,13 @@ function M.preflight(o)
   -- is the only way to the tools.
   if not o.mcp_socket then
     return "Codex runs sandboxed, and needs the MCP server's socket (mcp_socket) to reach the tools"
+  end
+  -- A login in the system keyring is keyed by the Codex home's path, so it
+  -- would need the user's own home in the sandbox: their sessions, memories
+  -- and global instructions, readable to a shell with the network.
+  if not select(2, M.codex_home()) then
+    return ("Codex has no %s/auth.json: fieldguide needs a file login, not the system keyring. "):format(user_home())
+      .. 'Set cli_auth_credentials_store = "file" in its config.toml and run `codex login`.'
   end
   local bin = M.binary(o)
   if not bin then
@@ -325,6 +327,13 @@ function M.argv(o)
     "hooks.PreToolUse=" .. hook("pre", 90),
     "-c",
     "hooks.PostToolUse=" .. hook("post", 150),
+    -- The end of the turn, for a write a backgrounded command made after the
+    -- last hook looked. No `|| exit 2` here: to a Stop hook, 2 means "keep
+    -- going", and a check that failed must not keep the agent running.
+    "-c",
+    ('hooks.Stop=[{hooks=[{type="command",command=%s,timeout=150}]}]'):format(
+      q(("%s %s stop"):format(vim.fn.shellescape(node), vim.fn.shellescape(hook_path(o))))
+    ),
     "-c",
     "mcp_servers.fieldguide.command=" .. q(node),
     "-c",
@@ -351,7 +360,6 @@ function M.env(o)
   local env = {
     CODEX_HOME = (M.codex_home()),
     HOME = M.shell_home(),
-    FIELDGUIDE_HOOK_STATE = M.hook_state(),
   }
   -- Emptied, not removed: the environment is merged over the editor's.
   for _, name in ipairs(M.inherited) do
@@ -389,12 +397,6 @@ function M.needs(o)
   -- bound as the file the link in `home` names, written in place.
   add(rw, home)
   add(rw, login)
-  if not login and vim.uv.os_uname().sysname == "Darwin" then
-    -- A login in the system keyring, which Codex opens itself.
-    add(ro, vim.fs.normalize("~/Library/Keychains"))
-  end
-  vim.fn.mkdir(M.hook_state(), "p")
-  add(rw, M.hook_state())
   add(rw, M.shell_home())
   return { ro = ro, rw = rw }
 end
