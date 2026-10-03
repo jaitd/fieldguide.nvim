@@ -58,7 +58,7 @@ emit_stream() {
 
 emit '{"type":"agent_start"}'
 emit '{"type":"turn_start"}'
-emit '{"type":"message_start","message":{"role":"assistant"}}'
+emit '{"type":"message_start","message":{"role":"assistant","provider":"fake","model":"fake/model-1"}}'
 emit '{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}'
 
 # The load case.

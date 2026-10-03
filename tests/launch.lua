@@ -245,6 +245,43 @@ do
     winbar()
   )
   chat.stop()
+
+  -- The model pi names in its own messages, with nothing chosen anywhere.
+  launch.choose({ name = "pi" })
+  chat.start({ argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  chat._state().session:prompt("hi")
+  local named = vim.wait(10000, function()
+    return winbar():find("fake/model-1", 1, true) ~= nil
+  end, 20)
+  check("the title names the model the agent reports", named, winbar())
+  chat.stop()
+
+  -- A saved pi session that names its model, resumed with nothing chosen.
+  local saved = scratch .. "/saved-session.jsonl"
+  vim.fn.writefile({
+    vim.json.encode({ type = "message", message = { role = "user", content = "hi" } }),
+    vim.json.encode({
+      type = "message",
+      message = { role = "assistant", model = "saved/model-0", content = { { type = "text", text = "hello" } } },
+    }),
+  }, saved)
+  chat.resume({ id = "saved", path = saved }, { argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  check(
+    "a resumed session's title names the model it last answered with",
+    winbar():find("saved/model-0", 1, true) ~= nil,
+    winbar()
+  )
+  chat.stop()
+  -- A model chosen since is the one pi is started with, and resumes on.
+  launch.choose({ name = "pi", model = "chosen/model-2" })
+  chat.resume({ id = "saved", path = saved }, { argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  check(
+    "...unless a model was chosen since, which is the one resumed on",
+    winbar():find("chosen/model-2", 1, true) ~= nil and winbar():find("saved/model-0", 1, true) == nil,
+    winbar()
+  )
+  chat.stop()
+  launch.choose({ name = "claude", model = "haiku" })
   chat.close()
   chat.open()
   check("...and the next choice once that session is over", winbar():find("claude · haiku", 1, true) ~= nil, winbar())

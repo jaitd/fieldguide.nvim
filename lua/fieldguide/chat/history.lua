@@ -169,6 +169,11 @@ function M.events(path)
           table.insert(out, { kind = "user", text = text })
         end
       elseif message.role == "assistant" then
+        -- Which model answered, as the live stream would have said it: the
+        -- title names it, here as there.
+        if type(message.model) == "string" and message.model ~= "" then
+          table.insert(out, { kind = "model", model = message.model })
+        end
         local said = false
         for _, part in ipairs(type(message.content) == "table" and message.content or {}) do
           if part.type == "text" and vim.trim(part.text or "") ~= "" then
