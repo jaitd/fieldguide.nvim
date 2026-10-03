@@ -177,7 +177,7 @@ async function main(mode: string): Promise<void> {
       process.stdout.write(
         JSON.stringify({
           decision: "block",
-          reason: `A write to the config was found after your last tool call, and checked:\n${text}`,
+          reason: `fieldguide looked at the config after your last tool call:\n${text}`,
         }),
       );
     }
@@ -197,7 +197,7 @@ async function main(mode: string): Promise<void> {
         JSON.stringify({
           hookSpecificOutput: {
             hookEventName: "UserPromptSubmit",
-            additionalContext: `The config changed since the last turn, and was checked:\n${text}`,
+            additionalContext: `fieldguide looked at the config at the start of this prompt:\n${text}`,
           },
         }),
       );

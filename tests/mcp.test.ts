@@ -520,6 +520,19 @@ test("over a socket", async (t) => {
     assert.match(again.stdout, /verify unavailable/, "the same change is looked at again, not dropped");
   });
 
+  await t.test("a first look whose baseline checkpoint fails says so, and the next is a first look again", async () => {
+    // A server of its own, that nothing has looked through yet.
+    const fresh = path.join(root, "fresh.sock");
+    const other = await listen(fresh, base);
+    t.after(() => other.proc.kill("SIGKILL"));
+    const env = { ...inside, FIELDGUIDE_MCP_SOCKET: fresh };
+    const first = await hookRun(["--tree-after"], env, configRoot);
+    assert.equal(first.code, 0, first.stderr);
+    assert.match(first.stdout, /checkpoint failed: .*no checkpoint/);
+    const again = await hookRun(["--tree-after"], env, configRoot);
+    assert.match(again.stdout, /checkpoint failed: .*no checkpoint/, "not verified as if the agent had written it");
+  });
+
   await t.test("a live server is not taken over by a second", async () => {
     const second = await listen(sock, base);
     assert.equal(await second.exited, 1);

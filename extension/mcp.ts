@@ -448,7 +448,16 @@ async function treeHook(session: Session, id: Id, which: "before" | "after") {
     } else if (which === "before" || first) {
       const decision = await beforeWrite(root, signal);
       if (decision.allow) lastTree = now;
-      result = which === "before" ? decision : { text: "" };
+      if (which === "before") result = decision;
+      else if (decision.allow) result = { text: "" };
+      else {
+        // No baseline after all: the next look is the first again, so the
+        // config as it stands is not reported as a change the agent made.
+        looked = false;
+        result = {
+          text: `[fieldguide] ${CHECKPOINT_FAILED}: ${decision.reason} — the config as it stands has no checkpoint, so :FieldguideUndo cannot go back to it`,
+        };
+      }
     } else {
       const text = await afterWrite(root, signal);
       if (handled(text)) lastTree = fingerprint(root);
