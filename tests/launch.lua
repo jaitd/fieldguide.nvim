@@ -272,6 +272,15 @@ do
     winbar()
   )
   chat.stop()
+  -- A model chosen since is the one pi is started with, and resumes on.
+  launch.choose({ name = "pi", model = "chosen/model-2" })
+  chat.resume({ id = "saved", path = saved }, { argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  check(
+    "...unless a model was chosen since, which is the one resumed on",
+    winbar():find("chosen/model-2", 1, true) ~= nil and winbar():find("saved/model-0", 1, true) == nil,
+    winbar()
+  )
+  chat.stop()
   launch.choose({ name = "claude", model = "haiku" })
   chat.close()
   chat.open()

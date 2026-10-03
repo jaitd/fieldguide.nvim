@@ -1347,10 +1347,11 @@ function M.resume(entry, start_opts)
   state.model = nil
   replay(entry.path)
   -- The model the saved session last named, carried over the start, which
-  -- begins with none: pi names it again only when it next answers.
+  -- begins with none: pi names it again only when it next answers. Only when
+  -- no model was chosen: a chosen one is passed to pi, which resumes on it.
   local replayed = state.model
   M.start(vim.tbl_extend("force", { session = entry.id }, start_opts or {}))
-  if replayed and state.session then
+  if replayed and state.session and not require("fieldguide.launch").model() then
     state.model = replayed
     state.label = (state.harness ~= "pi" and (state.harness .. " · ") or "") .. replayed
     set_title()
