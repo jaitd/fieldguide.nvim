@@ -26,7 +26,7 @@
 // Zero dependencies, like the rest of the extension: newline-delimited
 // JSON-RPC over stdio is small enough to speak by hand.
 
-import { chmodSync, fstatSync, lstatSync, unlinkSync } from "node:fs";
+import { chmodSync, fstatSync, lstatSync, mkdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { createConnection, createServer, type Socket } from "node:net";
 import * as path from "node:path";
@@ -548,6 +548,39 @@ async function clearStale(socketPath: string): Promise<string | null> {
   return `${socketPath} kept changing while it was being taken over`;
 }
 
+const TAKEOVER_LOCK_STALE_MS = 5_000;
+
+/**
+ * Runs `fn` holding `<socket>.lock`, a directory, because mkdir either makes
+ * it or fails: two servers can never both hold it. A takeover takes
+ * milliseconds, so a lock older than a few seconds was left by a server that
+ * died holding it, and is taken over in turn.
+ */
+async function withTakeoverLock<T>(socketPath: string, fn: () => Promise<T>): Promise<T> {
+  const lock = `${socketPath}.lock`;
+  const deadline = Date.now() + 2 * TAKEOVER_LOCK_STALE_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock, 0o700);
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+    try {
+      if (Date.now() - statSync(lock).mtimeMs > TAKEOVER_LOCK_STALE_MS) rmdirSync(lock);
+    } catch {}
+    if (Date.now() > deadline) throw new Error(`${lock} is held and has not been released`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      rmdirSync(lock);
+    } catch {}
+  }
+}
+
 // sun_path is 104 bytes on macOS and 108 on Linux, NUL included. Past that the
 // kernel answers EINVAL, which names neither the limit nor the path's length.
 const SOCKET_PATH_MAX = 103;
@@ -565,8 +598,6 @@ async function serveSocket(socketPath: string) {
     process.stderr.write(`fieldguide: ${why}\n`);
     process.exit(1);
   };
-  const refusal = await clearStale(socketPath);
-  if (refusal) refuse(refusal);
 
   const server = createServer((conn: Socket) => {
     conn.setEncoding("utf8");
@@ -579,25 +610,33 @@ async function serveSocket(socketPath: string) {
     attach(session, conn, () => conn.end());
   });
 
-  // Owner-only from the moment it exists, not after a chmod: the socket is a
-  // way to run the verbs, and nobody else on the machine should have it.
-  const previous = process.umask(0o177);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(socketPath, () => resolve());
-    });
-  } catch (err) {
-    // Another server bound the path between the stale socket going and this
-    // bind: it is the one being served now.
-    if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") refuse(`${socketPath} is already being served`);
-    throw err;
-  } finally {
-    process.umask(previous);
-  }
-  chmodSync(socketPath, 0o600);
-  // The socket this server bound. Only this one is ever removed on the way out.
-  const own = identity(socketPath);
+  // Probe, clear and bind as one step, under the lock: another server doing
+  // the same at the same time would otherwise see the same dead socket, and
+  // one of the two would unlink the other's fresh one.
+  let own: Identity | null = null;
+  const refusal = await withTakeoverLock(socketPath, async () => {
+    const stale = await clearStale(socketPath);
+    if (stale) return stale;
+    // Owner-only from the moment it exists, not after a chmod: the socket is a
+    // way to run the verbs, and nobody else on the machine should have it.
+    const previous = process.umask(0o177);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(socketPath, () => resolve());
+      });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") return `${socketPath} is already being served`;
+      throw err;
+    } finally {
+      process.umask(previous);
+    }
+    chmodSync(socketPath, 0o600);
+    // The socket this server bound. Only this one is ever removed on the way out.
+    own = identity(socketPath);
+    return null;
+  });
+  if (refusal) refuse(refusal);
 
   let closing = false;
   const shutdown = () => {
