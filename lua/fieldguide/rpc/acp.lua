@@ -631,12 +631,9 @@ function Session:_write(msg)
   if msg.id == nil then
     -- The pi session stamps an id on anything that has none, and an id turns
     -- a JSON-RPC notification into a request the agent then has to answer. A
-    -- notification goes to the pipe directly.
-    -- TODO(integration): give `rpc.Session:send` a way to send without an id.
-    local ok, err = pcall(function()
-      self._rpc._proc:write(require("fieldguide.rpc.framing").encode(msg))
-    end)
-    return ok and "notification" or nil, not ok and tostring(err) or nil
+    -- notification is written as it is.
+    local ok, err = self._rpc:write(msg)
+    return ok and "notification" or nil, err
   end
   return self._rpc:send(msg, { expect_response = false })
 end

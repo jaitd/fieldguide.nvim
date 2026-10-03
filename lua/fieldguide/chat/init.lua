@@ -10,7 +10,6 @@
 
 local cfg = require("fieldguide.config")
 local events = require("fieldguide.rpc.events")
-local rpc = require("fieldguide.rpc")
 local history = require("fieldguide.chat.history")
 local reading = require("fieldguide.chat.reading")
 local sink = require("fieldguide.chat.sink")
@@ -104,12 +103,29 @@ end
 ---The transcript's winbar is the panel's nameplate: which tool this is, and
 ---which model is answering. It never changes, which is what makes the prompt's
 ---winbar readable as activity rather than as decoration.
+---The harness and model the next start will run. pi goes unnamed, as it
+---always has.
+---@return string
+local function next_label()
+  local launch = require("fieldguide.launch")
+  local parts = {}
+  local harness = launch.current().name
+  if harness ~= "pi" then
+    table.insert(parts, harness)
+  end
+  table.insert(parts, launch.model())
+  return table.concat(parts, " · ")
+end
+
 local function set_title()
   if not (state.out_win and vim.api.nvim_win_is_valid(state.out_win)) then
     return
   end
-  local model = cfg.options.model
-  local right = model and (" " .. (tostring(model):gsub("%%", "%%%%")) .. " ") or ""
+  -- What the running session was started with, kept at its start: a choice
+  -- made meanwhile applies only from the next session, and the title must not
+  -- name it while another agent answers. With no session, the next start.
+  local label = state.session and state.session:is_running() and state.label or next_label()
+  local right = label ~= "" and (" " .. (label:gsub("%%", "%%%%")) .. " ") or ""
   vim.wo[state.out_win].winbar = "%#FieldguideTitle# " .. NAME .. "%*%=%#FieldguideSession#" .. right
 end
 
@@ -1266,6 +1282,13 @@ end
 ---that produced this transcript, so the next thing you ask lands in the
 ---conversation you are looking at rather than beside it.
 function M.history()
+  -- The files listed are pi's. Resuming one with another harness would hand
+  -- it an id it has never seen.
+  local harness = require("fieldguide.launch").current().name
+  if harness ~= "pi" then
+    vim.notify(("fieldguide: past sessions are kept for pi only so far, and this is %s"):format(harness))
+    return
+  end
   local entries = history.list()
   if #entries == 0 then
     vim.notify("fieldguide: no past sessions in " .. history.dir(), vim.log.levels.INFO)
@@ -1284,6 +1307,13 @@ end
 ---@param entry table one of `history.list()`
 ---@param start_opts table? passed on to `M.start`, for tests
 function M.resume(entry, start_opts)
+  -- Checked here, not only before the picker opened: the harness can change
+  -- while it is open, and a pi session's id means nothing to another agent.
+  local harness = require("fieldguide.launch").current().name
+  if harness ~= "pi" and not (start_opts and start_opts.argv) then
+    vim.notify(("fieldguide: that is a pi session, and the panel now runs %s"):format(harness), vim.log.levels.WARN)
+    return
+  end
   M.stop()
   M.open()
   clear_transcript()
@@ -1314,13 +1344,15 @@ function M.start(start_opts)
 
   M.open()
 
-  local session, err = rpc.start(start_opts or {})
+  local session, err = require("fieldguide.launch").start(start_opts or {})
   if not session then
     vim.notify("fieldguide: " .. tostring(err), vim.log.levels.ERROR)
     return
   end
 
   state.session = session
+  state.label = next_label()
+  set_title()
   state.block = nil
   state.tool_args = {}
   state.unsub = session:on_event(on_event)

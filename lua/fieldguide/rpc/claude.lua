@@ -483,4 +483,122 @@ function Normaliser:normalize(raw)
   return { { kind = "unknown", note = tostring(t), raw = raw } }
 end
 
+-- ---------------------------------------------------------------------------
+-- Session
+-- ---------------------------------------------------------------------------
+
+---One long-lived `claude -p` process, spoken to in stream-json: prompts in on
+---stdin, the normaliser's events out. Claude queues a prompt sent mid-turn
+---itself, so there is no queue here.
+---@class fieldguide.ClaudeSession
+---@field private _rpc fieldguide.RpcSession
+---@field private _norm fieldguide.ClaudeNormaliser
+---@field private _subs table<integer, fun(event: fieldguide.Event)>
+---@field private _next_sub integer
+---@field private _next_interrupt integer
+local Session = {}
+Session.__index = Session
+
+---@param opts { argv: string[], cwd?: string, env?: table, session?: string }
+---@return fieldguide.ClaudeSession?, string?
+function M.start(opts)
+  local inner, err = require("fieldguide.rpc").start({ argv = opts.argv, cwd = opts.cwd, env = opts.env, raw = true })
+  if not inner then
+    return nil, err
+  end
+  local self = setmetatable({
+    _rpc = inner,
+    _norm = M.new(),
+    _subs = {},
+    _next_sub = 1,
+    _next_interrupt = 1,
+  }, Session)
+  -- Known before Claude says it, so a session stopped before its first answer
+  -- can still be resumed by the id it was started with.
+  self._norm.session_id = opts.session
+  inner:on_event(function(event)
+    -- The process's own events (exit, stderr, a line that would not decode)
+    -- pass through; every decoded line is Claude's, and normalised here.
+    if event.kind ~= "unknown" then
+      self:_emit(event)
+      return
+    end
+    for _, e in ipairs(self._norm:normalize(event.raw)) do
+      self:_emit(e)
+    end
+  end)
+  return self, nil
+end
+
+---@param event fieldguide.Event
+function Session:_emit(event)
+  for _, fn in pairs(self._subs) do
+    local ok, err = pcall(fn, event)
+    if not ok then
+      vim.notify("fieldguide claude subscriber error: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end
+end
+
+---@param fn fun(event: fieldguide.Event)
+---@return fun() unsubscribe
+function Session:on_event(fn)
+  local id = self._next_sub
+  self._next_sub = id + 1
+  self._subs[id] = fn
+  return function()
+    self._subs[id] = nil
+  end
+end
+
+---@param message string
+---@param _opts table? accepted for the pi session's signature
+---@return string?, string?
+function Session:prompt(message, _opts)
+  local ok, err = self._rpc:write(M.encode_prompt(message))
+  if not ok then
+    return nil, err
+  end
+  return "queued", nil
+end
+
+---Stop the running turn. It ends with a `result` saying it was aborted, which
+---the normaliser reports as a stop rather than an error.
+function Session:interrupt()
+  local id = ("fg-interrupt-%d"):format(self._next_interrupt)
+  self._next_interrupt = self._next_interrupt + 1
+  self._rpc:write(M.encode_interrupt(id))
+end
+
+---The pi session's generic `send`, for the one command the panel sends raw.
+---@param command table
+---@return string?, string?
+function Session:send(command)
+  if command.type == "abort" then
+    self:interrupt()
+    return "interrupt", nil
+  end
+  return nil, ("%s is a pi command; this agent speaks Claude's stream-json"):format(tostring(command.type))
+end
+
+---Claude raises no dialogs of pi's kind: its permissions are settled by the
+---hooks and settings it was started with.
+function Session:answer_ui()
+  return nil, "Claude sessions raise no dialogs"
+end
+
+---@return boolean
+function Session:is_running()
+  return self._rpc:is_running()
+end
+
+---@return string? the id to resume this session by
+function Session:session_id()
+  return self._norm.session_id
+end
+
+function Session:stop()
+  self._rpc:stop()
+end
+
 return M

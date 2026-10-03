@@ -144,6 +144,28 @@ M.setup = function(opts)
     desc = "Set the reload level for this session",
   })
 
+  cmd("FieldguideHarness", function(args)
+    local launch = require("fieldguide.launch")
+    if args.args == "" then
+      local c = launch.current()
+      show("harness", c.name .. (c.model and (" (" .. c.model .. ")") or ""))
+      return
+    end
+    local ok, err = launch.choose({ name = args.args })
+    if not ok then
+      vim.notify("fieldguide: " .. tostring(err), vim.log.levels.ERROR)
+      return
+    end
+    -- A running session keeps the agent it was started with.
+    show("harness", args.args .. ", from the next session (:FieldguideStop ends this one)")
+  end, {
+    nargs = "?",
+    complete = function()
+      return require("fieldguide.launch").HARNESSES
+    end,
+    desc = "Show or choose the agent harness: pi, claude, opencode, codex",
+  })
+
   cmd("FieldguideIndex", function()
     require("fieldguide.index").fetch({})
   end, { desc = "Fetch or refresh the plugin index" })

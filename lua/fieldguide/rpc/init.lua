@@ -76,7 +76,11 @@ function M.argv(opts)
   return argv
 end
 
----@param opts table? { argv?: string[], cwd?: string, env?: table }
+---`raw` hands each decoded line up as an `unknown` event, untouched, for an
+---adapter that speaks something other than pi and normalises it itself: pi's
+---normaliser would read a line of another protocol that shares one of pi's
+---`type`s as pi's.
+---@param opts table? { argv?: string[], cwd?: string, env?: table, raw?: boolean }
 ---@return fieldguide.RpcSession?, string?
 function M.start(opts)
   opts = opts or {}
@@ -93,6 +97,7 @@ function M.start(opts)
     _next_id = 1,
     _pending = {},
     _stopped = false,
+    _raw = opts.raw == true,
     stats = { lines = 0, events = 0, bytes = 0, decode_errors = 0, unknown = 0 },
   }, Session)
 
@@ -165,7 +170,7 @@ function Session:_on_line(line)
     return
   end
 
-  local event = events.normalize(decoded)
+  local event = self._raw and { kind = "unknown", raw = decoded } or events.normalize(decoded)
   if event.kind == "unknown" then
     self.stats.unknown = self.stats.unknown + 1
   end
@@ -260,6 +265,20 @@ function Session:send(command, opts)
     return nil, tostring(err)
   end
   return id, nil
+end
+
+---Write one message as it is: no id stamped on it, nothing kept pending. For
+---a protocol where an id means something else, or where a message has none.
+---@param value table
+---@return boolean ok, string? err
+function Session:write(value)
+  if self._stopped then
+    return false, "the agent process has exited"
+  end
+  local ok, err = pcall(function()
+    self._proc:write(framing.encode(value))
+  end)
+  return ok, not ok and tostring(err) or nil
 end
 
 ---@param message string

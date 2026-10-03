@@ -332,6 +332,32 @@ do
 end
 
 do
+  -- A launch with no command to give says why, and nothing is run in its
+  -- place: rpc.start with no argv would start pi.
+  local s = codex.start({
+    cwd = root,
+    launch = function()
+      return nil, "the agent sandbox is gone"
+    end,
+  })
+  local got = {}
+  s:on_event(function(e)
+    table.insert(got, e)
+  end)
+  s:prompt("one")
+  local ok = wait_settled(got, 1)
+  local errors = vim.tbl_filter(function(e)
+    return e.kind == "error" and e.source == "codex"
+  end, got)
+  check(
+    "a launch that answers nil says why, and runs nothing",
+    ok and #errors == 1 and errors[1].message == "the agent sandbox is gone" and #of_kind(got, "run_start") == 0,
+    vim.inspect(errors)
+  )
+  s:stop()
+end
+
+do
   -- A queued prompt whose launch fails is reported, and the queue moves on.
   local n = 0
   local s = codex.start({

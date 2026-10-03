@@ -559,6 +559,73 @@ check(
   h.argv(o)[1] == vim.uv.fs_realpath(vim.fn.exepath("claude")) or vim.fn.executable("claude") == 0
 )
 
+-- ---------------------------------------------------------------------------
+io.write("session\n")
+
+do
+  local FAKE = root .. "/tests/fixtures/fake-claude.sh"
+  local function session(opts)
+    local s = assert(claude.start(vim.tbl_extend("force", { argv = { FAKE }, cwd = root }, opts or {})))
+    local got = {}
+    s:on_event(function(e)
+      table.insert(got, e)
+    end)
+    return s, got
+  end
+  local function wait_for(got, kind, count)
+    return vim.wait(10000, function()
+      return #of_kind(got, kind) >= count
+    end, 20)
+  end
+
+  local s, got = session()
+  s:prompt("hello there")
+  check("a prompt is answered, and the turn settles", wait_for(got, "settled", 1), vim.inspect(got))
+  local said = table.concat(vim.tbl_map(function(e)
+    return e.text
+  end, of_kind(got, "text_delta")))
+  check("...with the answer as text", said == "you said: hello there", said)
+  check("...and no line left unread", #of_kind(got, "unknown") == 0, vim.inspect(of_kind(got, "unknown")))
+  check("the session's id is the one Claude gave", s:session_id() == "s-new", tostring(s:session_id()))
+
+  s:prompt("again")
+  check("the same process answers the next prompt", wait_for(got, "settled", 2))
+  check("...and is still running", s:is_running())
+
+  s:prompt("a slow one")
+  vim.wait(5000, function()
+    return #of_kind(got, "run_start") >= 3
+  end, 20)
+  check("an abort from the panel is an interrupt", s:send({ type = "abort" }) == "interrupt")
+  check("...and the turn ends as aborted, not an error", wait_for(got, "settled", 3))
+  local ends = of_kind(got, "turn_end")
+  check(
+    "...said as a stop",
+    #ends == 1 and ends[1].stop_reason == "aborted",
+    vim.inspect(vim.tbl_map(function(e)
+      return e.stop_reason
+    end, ends))
+  )
+  check("pi's other commands are refused", s:send({ type = "compact" }) == nil)
+  check("there are no dialogs to answer", s:answer_ui() == nil)
+  s:stop()
+  check(
+    "stopped, it is not running",
+    vim.wait(5000, function()
+      return not s:is_running()
+    end, 20)
+  )
+
+  local r, rgot = session({ argv = { FAKE, "--resume", "s-old" }, session = "s-old" })
+  check("a resumed session knows its id before Claude says it", r:session_id() == "s-old")
+  r:prompt("hi")
+  check("...and carries it on", wait_for(rgot, "settled", 1) and r:session_id() == "s-old")
+  r:stop()
+
+  local none, err = claude.start({ argv = { root .. "/no-such-claude" }, cwd = root })
+  check("a claude that is not there is said at start", none == nil and err ~= nil, tostring(err))
+end
+
 for k, v in pairs(saved) do
   vim.env[k] = v
 end
