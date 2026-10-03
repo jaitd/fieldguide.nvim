@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -508,6 +508,31 @@ test("over a socket", async (t) => {
     assert.match(res.stdout, /^\[fieldguide\] verify unavailable/);
   });
 
+  // This server's editor is unreachable: every checkpoint and verify fails.
+  await t.test("a change whose checkpoint failed is not taken as handled, and is tried again", async () => {
+    // A look first, refused here, so the next is not the first of all.
+    await hookRun(["--tree-before"], inside, configRoot);
+    await writeFile(path.join(configRoot, "unhandled.lua"), "return 1\n");
+    const first = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(first.stdout, /verify unavailable/);
+    assert.match(first.stdout, /checkpoint failed/, "a write that cannot be undone says so");
+    const again = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(again.stdout, /verify unavailable/, "the same change is looked at again, not dropped");
+  });
+
+  await t.test("a first look whose baseline checkpoint fails says so, and the next is a first look again", async () => {
+    // A server of its own, that nothing has looked through yet.
+    const fresh = path.join(root, "fresh.sock");
+    const other = await listen(fresh, base);
+    t.after(() => other.proc.kill("SIGKILL"));
+    const env = { ...inside, FIELDGUIDE_MCP_SOCKET: fresh };
+    const first = await hookRun(["--tree-after"], env, configRoot);
+    assert.equal(first.code, 0, first.stderr);
+    assert.match(first.stdout, /checkpoint failed: .*no checkpoint/);
+    const again = await hookRun(["--tree-after"], env, configRoot);
+    assert.match(again.stdout, /checkpoint failed: .*no checkpoint/, "not verified as if the agent had written it");
+  });
+
   await t.test("a live server is not taken over by a second", async () => {
     const second = await listen(sock, base);
     assert.equal(await second.exited, 1);
@@ -788,6 +813,18 @@ test("against a live editor", async (t) => {
     assert.equal(await realpath(JSON.parse(res.result.content[0].text).nvim.config_dir), configRoot);
   });
 
+  // The first look of all, as at Codex's first prompt: the tree as it stands
+  // is the user's, with no earlier look for it to have changed since.
+  await t.test("a first --tree-after takes the tree as it stands as the baseline, and says nothing", async () => {
+    await writeFile(path.join(configRoot, "before-any-turn.lua"), "return 0\n");
+    const res = await hookRun(["--tree-after"], inside, configRoot);
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(res.stdout, "");
+    await writeFile(path.join(configRoot, "in-a-turn.lua"), "return 1\n");
+    const next = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(next.stdout, /checkpoint [0-9a-f]+/, "a change after it is reported");
+  });
+
   await t.test("through the socket, --before-write lets a config write through", async () => {
     const res = await hookRun(["--before-write", "lua/via-socket.lua"], inside, configRoot);
     assert.equal(res.code, 0, res.stderr);
@@ -801,5 +838,45 @@ test("against a live editor", async (t) => {
     assert.equal(res.code, 0, res.stderr);
     assert.match(res.stdout, /^\[fieldguide\] (boot OK|boot FAILED|boot TIMED OUT|verify unavailable)/);
     assert.match(res.stdout, /checkpoint [0-9a-f]+ \(undo with :FieldguideUndo\)/);
+  });
+
+  // The tree hooks, for a shell nobody announces writes from. The server keeps
+  // the tree as last checkpointed; the hooks inside the sandbox keep nothing.
+  await t.test("through the socket, --tree-after verifies a changed tree once", async () => {
+    await writeFile(path.join(configRoot, "lua", "shell.lua"), "return 1\n");
+    const first = await hookRun(["--tree-after"], inside, configRoot);
+    assert.equal(first.code, 0, first.stderr);
+    assert.match(first.stdout, /checkpoint [0-9a-f]+/);
+    const again = await hookRun(["--tree-after"], inside, configRoot);
+    assert.equal(again.stdout, "", "an unchanged tree costs nothing");
+  });
+
+  await t.test("a rewrite that keeps the length and puts the mtime back is still verified", async () => {
+    // Seen by the change time, which a write cannot set back. Whether the
+    // checkpoint then records it is git's stat cache to decide, which trusts
+    // size and mtime: so this asserts the verify, which is fieldguide's.
+    const file = path.join(configRoot, "lua", "same-size.lua");
+    await writeFile(file, "return 1\n");
+    await utimes(file, 1_700_000_000, 1_700_000_000);
+    await hookRun(["--tree-after"], inside, configRoot);
+    await writeFile(file, "return 2\n");
+    await utimes(file, 1_700_000_000, 1_700_000_000);
+    const res = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(res.stdout, /^\[fieldguide\] (boot OK|boot FAILED|boot TIMED OUT)/);
+  });
+
+  await t.test("--tree-before commits the user's own edits before the agent's command", async () => {
+    await writeFile(path.join(configRoot, "lua", "by-hand.lua"), "return 'mine'\n");
+    const res = await hookRun(["--tree-before"], inside, configRoot);
+    assert.equal(res.code, 0, res.stderr);
+    // That checkpoint is the new baseline: nothing for the after-hook to see.
+    assert.equal((await hookRun(["--tree-after"], inside, configRoot)).stdout, "");
+  });
+
+  await t.test("the server looks at its own config tree, whatever the hook names", async () => {
+    await writeFile(path.join(configRoot, "lua", "shell2.lua"), "return 3\n");
+    const elsewhere = await mkdtemp(path.join(root, "elsewhere-"));
+    const res = await hookRun(["--tree-after"], { ...inside, FIELDGUIDE_CONFIG_DIR: elsewhere }, elsewhere);
+    assert.match(res.stdout, /checkpoint [0-9a-f]+/, "the change in the real config tree is the one seen");
   });
 });

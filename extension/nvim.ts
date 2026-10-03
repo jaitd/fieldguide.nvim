@@ -453,11 +453,16 @@ export default function (pi: ExtensionAPI) {
  * information, not alarm: during a multi-file edit the agent will see
  * mid-sequence failures that are expected.
  */
+// Said in the post-write report when there was no verify, or no checkpoint.
+// The MCP server reads them to tell a write it handled from one to try again.
+export const VERIFY_UNAVAILABLE = "[fieldguide] verify unavailable";
+export const CHECKPOINT_FAILED = "checkpoint failed";
+
 function summarize(verify: VerbResult, checkpoint: VerbResult): string {
   const parts: string[] = [];
 
   if (!verify.ok) {
-    parts.push(`[fieldguide] verify unavailable: ${verify.error}`);
+    parts.push(`${VERIFY_UNAVAILABLE}: ${verify.error}`);
   } else {
     const r = verify.result as {
       ok?: boolean;
@@ -486,9 +491,14 @@ function summarize(verify: VerbResult, checkpoint: VerbResult): string {
     }
   }
 
-  if (checkpoint.ok) {
-    const c = checkpoint.result as { sha?: string; unchanged?: boolean };
+  const c = checkpoint.result as { ok?: boolean; sha?: string; error?: string } | undefined;
+  if (checkpoint.ok && c?.ok !== false) {
     if (c?.sha) parts.push(`  checkpoint ${c.sha} (undo with :FieldguideUndo)`);
+  } else {
+    // Said, not left out: a write with no checkpoint is one :FieldguideUndo
+    // cannot take back, and silence would promise that it can.
+    const why = !checkpoint.ok ? checkpoint.error : c?.error;
+    parts.push(`  ${CHECKPOINT_FAILED}: ${why ?? "unknown error"} — :FieldguideUndo cannot undo this write`);
   }
 
   return parts.join("\n");

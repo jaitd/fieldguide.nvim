@@ -5,6 +5,8 @@
 //   node extension/mcp.ts --relay [socket]       stdio <-> socket, for inside the sandbox
 //   node extension/mcp.ts --before-write <path>  gate + checkpoint, for a pre-write hook
 //   node extension/mcp.ts --after-write <path>   checkpoint + verify, for a post-write hook
+//   node extension/mcp.ts --tree-before          checkpoint if the config tree changed, before a shell command
+//   node extension/mcp.ts --tree-after           checkpoint + verify if it changed, after one
 //
 // When the agent runs sandboxed, the server runs *outside*, with --listen, and
 // only its socket is bound in. The harness launches --relay as its MCP server,
@@ -32,6 +34,7 @@ import { createConnection, createServer, type Socket } from "node:net";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { fingerprint } from "./harness/fingerprint.ts";
 
 // nvim.ts builds its schemas with typebox, which resolves only inside pi's own
 // install. A harness user may have no pi at all, so `typebox` is aliased to a
@@ -89,8 +92,20 @@ const handlers = new Map<string, Handler[]>();
  * socket-mode hooks run inside the sandbox, where there is no editor to reach
  * and nothing of nvim.ts should be.
  */
+// The post-write report's words for a write not handled, from nvim.ts, which
+// writes them. Set when the extension loads; nothing reads them before.
+let VERIFY_UNAVAILABLE = "[fieldguide] verify unavailable";
+let CHECKPOINT_FAILED = "checkpoint failed";
+
 async function loadExtension() {
-  const { default: extension } = (await import("./nvim.ts")) as { default: (pi: unknown) => void };
+  const mod = (await import("./nvim.ts")) as {
+    default: (pi: unknown) => void;
+    VERIFY_UNAVAILABLE: string;
+    CHECKPOINT_FAILED: string;
+  };
+  const extension = mod.default;
+  VERIFY_UNAVAILABLE = mod.VERIFY_UNAVAILABLE;
+  CHECKPOINT_FAILED = mod.CHECKPOINT_FAILED;
   extension({
     registerTool: (tool: Tool) => tools.set(tool.name, tool),
     on: (name: string, fn: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), fn]),
@@ -191,9 +206,19 @@ function askServer(
 // default), a pre-write runs one (the checkpoint) and a post-write two (the
 // checkpoint, then verify). A hook that gives up anyway closes its connection,
 // and the server abandons the work rather than finish it for nobody.
-const HOOK_TIMEOUT_MS = {
+const HOOK_TIMEOUT_MS: Record<string, number> = {
   "--before-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 75_000,
   "--after-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 135_000,
+  "--tree-before": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 75_000,
+  "--tree-after": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 135_000,
+};
+
+/** The server method each hook mode asks, over the socket. */
+const HOOK_METHOD: Record<string, string> = {
+  "--before-write": "fieldguide/beforeWrite",
+  "--after-write": "fieldguide/afterWrite",
+  "--tree-before": "fieldguide/treeBefore",
+  "--tree-after": "fieldguide/treeAfter",
 };
 
 function message(err: unknown): string {
@@ -205,11 +230,12 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
     process.stderr.write(`fieldguide: ${which} needs a path\n`);
     // A pre-write hook that cannot decide refuses: Claude Code reads any exit
     // but 2 as a hook that failed without blocking, and writes anyway.
-    return which === "--before-write" ? 2 : 1;
+    return which === "--before-write" || which === "--tree-before" ? 2 : 1;
   }
   const socketPath = process.env.FIELDGUIDE_MCP_SOCKET;
+  const tree = which === "--tree-before" || which === "--tree-after";
 
-  if (which === "--before-write") {
+  if (which === "--before-write" || which === "--tree-before") {
     // Deny is exit 2 with the reason on stderr: the convention Claude Code's
     // hooks use, and the easiest for any other harness's hook to map. So is a
     // server that cannot be reached or does not answer: a write nobody vetted
@@ -217,13 +243,9 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
     let decision: BeforeWrite;
     try {
       if (socketPath) {
-        decision = (await askServer(
-          socketPath,
-          "fieldguide/beforeWrite",
-          target,
-          HOOK_TIMEOUT_MS["--before-write"],
-        )) as BeforeWrite;
+        decision = (await askServer(socketPath, HOOK_METHOD[which], target, HOOK_TIMEOUT_MS[which])) as BeforeWrite;
       } else {
+        // No server, so no memory of the tree between calls: checkpoint.
         await loadExtension();
         decision = await beforeWrite(target);
       }
@@ -243,9 +265,10 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
   let text: string;
   try {
     if (socketPath) {
-      const result = await askServer(socketPath, "fieldguide/afterWrite", target, HOOK_TIMEOUT_MS["--after-write"]);
+      const result = await askServer(socketPath, HOOK_METHOD[which], target, HOOK_TIMEOUT_MS[which]);
       text = typeof result.text === "string" ? result.text : "";
     } else {
+      // No server, so no memory of the tree: verify whatever was written.
       await loadExtension();
       text = await afterWrite(target);
     }
@@ -366,6 +389,88 @@ async function callTool(session: Session, id: Id, params: Record<string, unknown
  * say): allowed, and the agent's write lands in its own tmpfs, where it is
  * thrown away. Both fail closed.
  */
+// The config tree as of the last checkpoint this server made, to tell a
+// shell command that wrote something from one that did not. Kept here, out of
+// the agent's reach: a hook runs inside the sandbox, where anything it stored
+// the agent could rewrite.
+let lastTree: string | undefined;
+// Whether any hook has looked yet. Before then there is no "since": the tree
+// as it stands is the user's, to checkpoint as the baseline, not to report.
+let looked = false;
+
+/**
+ * Whether a post-write report says the write was handled: checkpointed, and
+ * verified (a boot that failed is still a verify). If not, the tree is not
+ * taken as the new baseline, and the next look sees the same change again.
+ */
+function handled(report: string): boolean {
+  return !report.includes(VERIFY_UNAVAILABLE) && !report.includes(CHECKPOINT_FAILED);
+}
+
+function configRoot(): string {
+  return process.env.FIELDGUIDE_CONFIG_DIR || "";
+}
+
+/**
+ * The tree hooks, for a harness whose shell can write anywhere in the config
+ * tree unannounced (Codex). The server fingerprints its own config root, never
+ * a path the caller names, and compares with the tree as last checkpointed:
+ *
+ *   treeBefore  changed since (the user's own edits): checkpoint them now, so
+ *               what the agent does next is undoable on its own
+ *   treeAfter   changed since: checkpoint and verify, and say so; as the
+ *               first look of all, with no "since", the same as treeBefore
+ *
+ * Calling either directly grants nothing: the most either does is a
+ * checkpoint and a verify. And neither can be talked into skipping a change,
+ * because the only state is here. This is a safety net, not the boundary: a
+ * shell can write after the last call that looks, and a checkpoint is git's
+ * `add`, whose stat cache can miss a same-size rewrite with its mtime put back
+ * (which the fingerprint, by its change time, still sees and verifies). The
+ * agent sandbox is what keeps all of those writes inside the config tree.
+ */
+async function treeHook(session: Session, id: Id, which: "before" | "after") {
+  const root = configRoot();
+  if (!root) {
+    session.fail(id, -32602, "FIELDGUIDE_CONFIG_DIR is unset");
+    return;
+  }
+  const controller = new AbortController();
+  session.inflight.set(id, controller);
+  const { signal } = controller;
+  try {
+    const first = !looked;
+    looked = true;
+    const now = fingerprint(root);
+    let result: Record<string, unknown>;
+    if (now === lastTree) {
+      result = which === "before" ? { allow: true } : { text: "" };
+    } else if (which === "before" || first) {
+      const decision = await beforeWrite(root, signal);
+      if (decision.allow) lastTree = now;
+      if (which === "before") result = decision;
+      else if (decision.allow) result = { text: "" };
+      else {
+        // No baseline after all: the next look is the first again, so the
+        // config as it stands is not reported as a change the agent made.
+        looked = false;
+        result = {
+          text: `[fieldguide] ${CHECKPOINT_FAILED}: ${decision.reason} — the config as it stands has no checkpoint, so :FieldguideUndo cannot go back to it`,
+        };
+      }
+    } else {
+      const text = await afterWrite(root, signal);
+      if (handled(text)) lastTree = fingerprint(root);
+      result = { text };
+    }
+    if (!signal.aborted) session.send({ id, result });
+  } catch (err) {
+    if (!signal.aborted) session.fail(id, -32603, message(err));
+  } finally {
+    session.inflight.delete(id);
+  }
+}
+
 async function writeHook(session: Session, id: Id, which: "before" | "after", params: Record<string, unknown>) {
   const target = params.path;
   if (typeof target !== "string" || !path.isAbsolute(target)) {
@@ -374,12 +479,17 @@ async function writeHook(session: Session, id: Id, which: "before" | "after", pa
   }
   // In flight like a tool call, so a hook that hangs up — gave up waiting, or
   // was killed — aborts the checkpoint or verify it asked for.
+  looked = true;
   const controller = new AbortController();
   session.inflight.set(id, controller);
   const { signal } = controller;
   try {
     const result =
       which === "before" ? await beforeWrite(target, signal) : { text: await afterWrite(target, signal) };
+    // A write that was checkpointed and verified is the tree's new baseline.
+    if (which === "after" && configRoot() && handled(String((result as { text?: string }).text ?? ""))) {
+      lastTree = fingerprint(configRoot());
+    }
     if (!signal.aborted) session.send({ id, result });
   } catch (err) {
     if (!signal.aborted) session.fail(id, -32603, message(err));
@@ -433,6 +543,12 @@ function dispatch(session: Session, message: Message) {
       return;
     case "fieldguide/afterWrite":
       void writeHook(session, id as Id, "after", params);
+      return;
+    case "fieldguide/treeBefore":
+      void treeHook(session, id as Id, "before");
+      return;
+    case "fieldguide/treeAfter":
+      void treeHook(session, id as Id, "after");
       return;
     case "notifications/cancelled": {
       // The spec asks for no response to a cancelled request. Aborting kills
@@ -707,6 +823,9 @@ if (mode === "--before-write" || mode === "--after-write") {
   // exitCode rather than exit(): stdout to a pipe is asynchronous on macOS, and
   // exiting outright can drop the very line the hook is waiting for.
   process.exitCode = await runHook(mode, process.argv[3]);
+} else if (mode === "--tree-before" || mode === "--tree-after") {
+  // The tree is the config root; a server ignores the path and uses its own.
+  process.exitCode = await runHook(mode, process.env.FIELDGUIDE_CONFIG_DIR || process.cwd());
 } else if (mode === "--relay") {
   relay(process.argv[3] ?? process.env.FIELDGUIDE_MCP_SOCKET);
 } else if (mode === "--listen") {
