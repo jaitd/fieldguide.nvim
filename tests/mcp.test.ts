@@ -508,6 +508,16 @@ test("over a socket", async (t) => {
     assert.match(res.stdout, /^\[fieldguide\] verify unavailable/);
   });
 
+  // This server's editor is unreachable: every checkpoint and verify fails.
+  await t.test("a change whose checkpoint failed is not taken as handled, and is tried again", async () => {
+    await writeFile(path.join(configRoot, "unhandled.lua"), "return 1\n");
+    const first = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(first.stdout, /verify unavailable/);
+    assert.match(first.stdout, /checkpoint failed/, "a write that cannot be undone says so");
+    const again = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(again.stdout, /verify unavailable/, "the same change is looked at again, not dropped");
+  });
+
   await t.test("a live server is not taken over by a second", async () => {
     const second = await listen(sock, base);
     assert.equal(await second.exited, 1);

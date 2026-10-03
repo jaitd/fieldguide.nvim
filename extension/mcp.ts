@@ -92,8 +92,20 @@ const handlers = new Map<string, Handler[]>();
  * socket-mode hooks run inside the sandbox, where there is no editor to reach
  * and nothing of nvim.ts should be.
  */
+// The post-write report's words for a write not handled, from nvim.ts, which
+// writes them. Set when the extension loads; nothing reads them before.
+let VERIFY_UNAVAILABLE = "[fieldguide] verify unavailable";
+let CHECKPOINT_FAILED = "checkpoint failed";
+
 async function loadExtension() {
-  const { default: extension } = (await import("./nvim.ts")) as { default: (pi: unknown) => void };
+  const mod = (await import("./nvim.ts")) as {
+    default: (pi: unknown) => void;
+    VERIFY_UNAVAILABLE: string;
+    CHECKPOINT_FAILED: string;
+  };
+  const extension = mod.default;
+  VERIFY_UNAVAILABLE = mod.VERIFY_UNAVAILABLE;
+  CHECKPOINT_FAILED = mod.CHECKPOINT_FAILED;
   extension({
     registerTool: (tool: Tool) => tools.set(tool.name, tool),
     on: (name: string, fn: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), fn]),
@@ -383,6 +395,15 @@ async function callTool(session: Session, id: Id, params: Record<string, unknown
 // the agent could rewrite.
 let lastTree: string | undefined;
 
+/**
+ * Whether a post-write report says the write was handled: checkpointed, and
+ * verified (a boot that failed is still a verify). If not, the tree is not
+ * taken as the new baseline, and the next look sees the same change again.
+ */
+function handled(report: string): boolean {
+  return !report.includes(VERIFY_UNAVAILABLE) && !report.includes(CHECKPOINT_FAILED);
+}
+
 function configRoot(): string {
   return process.env.FIELDGUIDE_CONFIG_DIR || "";
 }
@@ -424,7 +445,7 @@ async function treeHook(session: Session, id: Id, which: "before" | "after") {
       result = decision;
     } else {
       const text = await afterWrite(root, signal);
-      lastTree = fingerprint(root);
+      if (handled(text)) lastTree = fingerprint(root);
       result = { text };
     }
     if (!signal.aborted) session.send({ id, result });
@@ -450,7 +471,9 @@ async function writeHook(session: Session, id: Id, which: "before" | "after", pa
     const result =
       which === "before" ? await beforeWrite(target, signal) : { text: await afterWrite(target, signal) };
     // A write that was checkpointed and verified is the tree's new baseline.
-    if (which === "after" && configRoot()) lastTree = fingerprint(configRoot());
+    if (which === "after" && configRoot() && handled(String((result as { text?: string }).text ?? ""))) {
+      lastTree = fingerprint(configRoot());
+    }
     if (!signal.aborted) session.send({ id, result });
   } catch (err) {
     if (!signal.aborted) session.fail(id, -32603, message(err));
