@@ -1,4 +1,4 @@
-// The three-zone gate, in opencode's vocabulary.
+// The three-zone gate, in opencode v2's vocabulary.
 //
 // `checkAccess` in ../gate.ts is the decision and stays the only one. This file
 // translates opencode's tools and arguments into pi's, and handles what pi's
@@ -13,22 +13,23 @@
 import * as path from "node:path";
 import { checkAccess, type Decision, type Zones } from "../gate.ts";
 
-/** opencode's file tools, as the pi tool the gate already has rules for. */
+/** opencode v2's file tools, as the pi tool the gate already has rules for. */
 const AS_PI: Record<string, string> = {
   read: "read",
   write: "write",
   edit: "edit",
-  multiedit: "edit",
-  // GPT models get apply_patch instead of edit/write; others get it too.
-  apply_patch: "edit",
   patch: "edit",
   grep: "grep",
   glob: "find",
-  list: "ls",
 };
 
-/** Tools with no path and no reach: the model's own scratch list. */
-const INERT = new Set(["todowrite", "todoread"]);
+/**
+ * Tools let through without a path of their own. `execute` is code mode: a
+ * script that can call tools and nothing else (no filesystem, process, network
+ * or imports, by opencode's own design), and every tool it calls comes back
+ * through this gate on its own. The todo list touches nothing.
+ */
+const PASS = new Set(["execute", "todowrite"]);
 
 /** fieldguide's verbs over MCP, namespaced by opencode as `<server>_<tool>`. */
 const OURS = /^fieldguide_nvim_[a-z_]+$/;
@@ -83,12 +84,12 @@ async function one(piTool: string, target: unknown, zones: Zones): Promise<Decis
 }
 
 export async function decide(tool: string, args: Record<string, unknown>, zones: Zones): Promise<Verdict> {
-  if (OURS.test(tool) || INERT.has(tool)) return { allow: true };
+  if (OURS.test(tool) || PASS.has(tool)) return { allow: true };
   const piTool = AS_PI[tool];
   if (!piTool) return deny(`fieldguide does not grant ${tool}`);
   args = args ?? {};
 
-  if (tool === "apply_patch" || tool === "patch") {
+  if (tool === "patch") {
     const paths = patchPaths(args.patchText);
     if (!paths) return deny(`${tool}: could not read which files the patch touches`);
     for (const p of paths) {
@@ -101,13 +102,13 @@ export async function decide(tool: string, args: Record<string, unknown>, zones:
   if (piTool === "read" || piTool === "write" || piTool === "edit") {
     // Required, unlike pi's optional `path`: a file tool with no file is a
     // malformed call, not one that defaults to the config root.
-    if (typeof args.filePath !== "string" || args.filePath === "") return deny(`${tool}: missing filePath`);
-    const d = await one(piTool, args.filePath, zones);
+    if (typeof args.path !== "string" || args.path === "") return deny(`${tool}: missing path`);
+    const d = await one(piTool, args.path, zones);
     if (!d.allow) return d;
-    return piTool === "read" ? { allow: true } : { allow: true, writes: [args.filePath] };
+    return piTool === "read" ? { allow: true } : { allow: true, writes: [args.path] };
   }
 
-  // grep, glob, list: an optional directory, defaulting to cwd.
+  // grep, glob: an optional directory, defaulting to cwd.
   const d = await one(piTool, args.path, zones);
   if (!d.allow) return d;
 

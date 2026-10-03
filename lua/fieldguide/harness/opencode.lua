@@ -4,7 +4,7 @@
 --
 --   1. opencode's own config: no shell, no network, no subagents, no skills;
 --      writes allowed, directories outside the config and doc zones denied.
---   2. The plugin (extension/harness/opencode-plugin.ts): the three-zone gate
+--   2. The plugin (extension/harness/opencode/fieldguide.ts): the three-zone gate
 --      from gate.ts on every tool call, refusing any tool it does not know,
 --      and pi's checkpoint-and-verify around every write.
 --   3. The agent sandbox, when there is one: `needs()` says what opencode must
@@ -82,6 +82,47 @@ function M.state_dir()
   return cfg.paths().state_dir .. "/harness/opencode"
 end
 
+---Where the plugin says it has loaded, for this editor's launches.
+---@return string
+function M.ready_path()
+  return ("%s/gate-ready-%d"):format(M.state_dir(), vim.fn.getpid())
+end
+
+---Whether the gate plugin loaded, asked once opencode has a session. A
+---plugin opencode could not load leaves only its own permissions between the
+---agent and the disk, and it says so in nothing but its log. So no file is a
+---refusal.
+---@return string? error
+function M.gate_ready()
+  if vim.uv.fs_stat(M.ready_path()) then
+    return nil
+  end
+  return "opencode did not load fieldguide's gate plugin, so the session is refused. "
+    .. "Check that this is opencode 2 and see its log for the reason."
+end
+
+---Launch-time problems, said before a process is spawned. Only opencode 2:
+---its plugin API, tool names and credential store all differ from 1.x, and
+---a 1.x would run without the gate.
+---@param _ fieldguide.HarnessOpts
+---@return string? error
+function M.preflight(_)
+  local bin = vim.fn.exepath("opencode")
+  if bin == "" then
+    return '"opencode" is not on PATH'
+  end
+  local r = vim.system({ bin, "--version" }, { text = true }):wait(10000)
+  local version = vim.trim((r.stdout or "") .. " " .. (r.stderr or ""))
+  local major = tonumber(version:match("v?(%d+)%.%d+"))
+  if not major then
+    return ("cannot tell which opencode this is (%q); fieldguide needs opencode 2"):format(version)
+  end
+  if major < 2 then
+    return ("this is opencode %s; fieldguide needs opencode 2"):format(version:match("v?(%d+[%d.]*)"))
+  end
+  return nil
+end
+
 ---opencode's own $HOME, empty, inside `state_dir()`.
 ---@return string
 function M.home()
@@ -103,20 +144,24 @@ function M.config(o)
 
   local config = {
     ["$schema"] = "https://opencode.ai/config.json",
-    plugin = { "file://" .. o.root .. "/extension/harness/opencode-plugin.ts" },
+    -- v2's `plugins`, naming the plugin's directory, which v2 enters through
+    -- index.js: a file here is skipped with only a log line, and the gate
+    -- with it. `gate_ready()` is what notices if it ever is.
+    plugins = { o.root .. "/extension/harness/opencode" },
     instructions = { o.system_prompt },
     -- Off at the source, so the model is never offered them. The plugin
     -- refuses them again if a later opencode adds one under a new name.
     tools = {
-      bash = false,
+      shell = false,
       webfetch = false,
       websearch = false,
-      codesearch = false,
-      task = false,
+      subagent = false,
       skill = false,
+      -- Asks the user, through a UI fieldguide does not show.
+      question = false,
     },
     permission = {
-      bash = "deny",
+      shell = "deny",
       webfetch = "deny",
       -- Asking would put a dialog in front of every edit the gate already
       -- vetted; see `acp.GRANTED_KINDS` for why fieldguide does not ask.
@@ -165,6 +210,11 @@ end
 ---@param name string
 ---@return boolean
 local function inherited_hazard(name)
+  -- Not OPENCODE_DB: it says where the user's own database is, which is where
+  -- their login is. Unset, opencode would look somewhere with no login in it.
+  if name == "OPENCODE_DB" then
+    return false
+  end
   return name:match("^OPENCODE_") ~= nil or name == "CLAUDECODE" or name:match("^CLAUDE_CODE_") ~= nil
 end
 
@@ -206,11 +256,11 @@ end
 function M.env(o)
   local env = {
     OPENCODE_CONFIG = M.write_config(o),
-    -- Sessions in a database of fieldguide's own: out of the user's opencode
-    -- history, and theirs out of this panel's. A private XDG_DATA_HOME would
-    -- do the same, but only by copying the credentials into it, and a token
-    -- refreshed into the copy is one the real file never learns about.
-    OPENCODE_DB = M.state_dir() .. "/opencode.db",
+    -- No OPENCODE_DB of our own: opencode v2 keeps the login in the same
+    -- database as the sessions (its `credential` table), so a private one has
+    -- no login, and copying the row in would leave a refreshed token behind in
+    -- one copy or the other. fieldguide's sessions are in the user's opencode
+    -- history, and resume from it.
     -- The recent-model list and prompt history opencode keeps for its own UI.
     -- A fieldguide session has no business reordering either.
     XDG_STATE_HOME = M.state_dir() .. "/state",
@@ -218,16 +268,11 @@ function M.env(o)
     -- directory above it, would otherwise be merged into the agent's config
     -- and prompt.
     OPENCODE_DISABLE_PROJECT_CONFIG = "1",
-    -- ~/.claude/CLAUDE.md and ~/.claude/skills are read by default. opencode
-    -- 1.x honours these two; v2 no longer reads either, which is why $HOME
-    -- below is opencode's own.
-    OPENCODE_DISABLE_CLAUDE_CODE = "1",
-    OPENCODE_DISABLE_EXTERNAL_SKILLS = "1",
     OPENCODE_DISABLE_AUTOUPDATE = "1",
   }
   -- opencode finds ~/.claude (CLAUDE.md, skills) and ~/.agents (skills)
-  -- through $HOME, so it gets an empty one of its own: there is nothing there
-  -- to merge into the agent's prompt, whichever opencode it is. Inside the
+  -- through $HOME, and v2 has no switch to stop it, so it gets an empty one of
+  -- its own: there is nothing there to merge into the agent's prompt. Inside the
   -- macOS sandbox it is also what keeps it starting at all, because a
   -- refused ~/.claude is EPERM rather than missing, and v2 fails the session
   -- on it. Its own directories are named outright so the move takes none of
@@ -240,6 +285,11 @@ function M.env(o)
   env.XDG_CACHE_HOME = xdg("XDG_CACHE_HOME", ".cache")
   -- The plugin's write hooks run mcp.ts on this node, which the sandbox binds.
   env.FIELDGUIDE_NODE = node_bin(o)
+  -- Cleared first, so a file left by an earlier launch never vouches for this
+  -- one.
+  vim.fn.mkdir(M.state_dir(), "p")
+  vim.uv.fs_unlink(M.ready_path())
+  env.FIELDGUIDE_GATE_READY = M.ready_path()
   if o.mcp_socket then
     -- The write hooks ask the server on this socket rather than the editor,
     -- and nothing in opencode's process tree is handed the editor's address.

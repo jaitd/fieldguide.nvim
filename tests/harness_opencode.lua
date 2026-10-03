@@ -43,15 +43,25 @@ do
   local c = h.config(o)
   check("the harness is spoken to over ACP", h.protocol == "acp" and h.name == "opencode")
 
-  local plugin = c.plugin[1]
-  check("the gate plugin is loaded", plugin == "file://" .. root .. "/extension/harness/opencode-plugin.ts", plugin)
-  check("...and exists", vim.uv.fs_stat(plugin:sub(#"file://" + 1)) ~= nil)
+  -- v2's `plugins`, naming a directory: a file there is skipped with a log line.
+  local plugin = c.plugins and c.plugins[1]
+  check(
+    "the gate plugin is loaded, by its directory",
+    plugin == root .. "/extension/harness/opencode",
+    tostring(plugin)
+  )
+  check(
+    "...which opencode v2 enters through index.js",
+    vim.uv.fs_stat(root .. "/extension/harness/opencode/index.js") ~= nil
+  )
+  check("never v1's `plugin` key", c.plugin == nil)
   check("the system prompt is ours", c.instructions[1] == o.system_prompt)
 
-  for _, tool in ipairs({ "bash", "webfetch", "websearch", "task", "skill" }) do
+  -- v2's names: a shell is `shell`, a subagent is `subagent`.
+  for _, tool in ipairs({ "shell", "webfetch", "websearch", "subagent", "skill", "question" }) do
     check(("%s is switched off"):format(tool), c.tools[tool] == false)
   end
-  check("a shell is denied as well as hidden", c.permission.bash == "deny")
+  check("a shell is denied as well as hidden", c.permission.shell == "deny")
   check("edits are not asked about", c.permission.edit == "allow")
   check("formatters and language servers do not run", c.formatter == false and c.lsp == false)
 
@@ -86,13 +96,13 @@ do
     h.env(vim.tbl_extend("force", o, { model = "openai/y" })).OPENCODE_CONFIG ~= env.OPENCODE_CONFIG
   )
 
-  check("sessions live in fieldguide's own database", env.OPENCODE_DB == h.state_dir() .. "/opencode.db")
+  -- v2 keeps the login in the sessions database: a private one has no login.
+  check("sessions live in the user's own opencode database, where the login is", env.OPENCODE_DB == nil)
   check("opencode's UI state is kept apart", vim.startswith(env.XDG_STATE_HOME, h.state_dir()))
+  check("project config is off", env.OPENCODE_DISABLE_PROJECT_CONFIG == "1")
   check(
-    "project config, Claude Code's files and external skills are off",
-    env.OPENCODE_DISABLE_PROJECT_CONFIG == "1"
-      and env.OPENCODE_DISABLE_CLAUDE_CODE == "1"
-      and env.OPENCODE_DISABLE_EXTERNAL_SKILLS == "1"
+    "no switch v2 does not read",
+    env.OPENCODE_DISABLE_CLAUDE_CODE == nil and env.OPENCODE_DISABLE_EXTERNAL_SKILLS == nil
   )
   -- opencode v2 no longer reads OPENCODE_DISABLE_CLAUDE_CODE: it finds
   -- ~/.claude, ~/.agents and CLAUDE.md through $HOME, so $HOME is its own.
@@ -132,6 +142,7 @@ do
 
   vim.env.OPENCODE_PURE = "1"
   vim.env.OPENCODE_PERMISSION = '{"bash":"allow"}'
+  vim.env.OPENCODE_DB = "/elsewhere/opencode.db"
   vim.env.CLAUDECODE = "1"
   vim.env.CLAUDE_CODE_ENTRYPOINT = "cli"
   local argv = h.argv(o)
@@ -154,8 +165,10 @@ do
   )
   check(
     "what the profile sets itself is never unset",
-    not vim.tbl_contains(argv, "OPENCODE_CONFIG") and not vim.tbl_contains(argv, "OPENCODE_DB")
+    not vim.tbl_contains(argv, "OPENCODE_CONFIG") and not vim.tbl_contains(argv, "XDG_DATA_HOME")
   )
+  check("nor is the user's own OPENCODE_DB, which is where their login is", not vim.tbl_contains(argv, "OPENCODE_DB"))
+  vim.env.OPENCODE_DB = nil
   vim.env.OPENCODE_PURE = nil
   vim.env.OPENCODE_PERMISSION = nil
   vim.env.CLAUDECODE = nil
@@ -212,6 +225,31 @@ do
     vim.inspect(h.needs(co).ro)
   )
   check("the relay runs on it too", h.mcp(vim.tbl_extend("force", co, { mcp_socket = "/s" })).command == real)
+end
+
+io.write("preflight\n")
+do
+  -- A stand-in opencode on PATH that reports the version under test.
+  local bin = scratch .. "/bin"
+  vim.fn.mkdir(bin, "p")
+  local path = vim.env.PATH
+  vim.env.PATH = bin .. ":" .. path
+  local function with_version(v)
+    vim.fn.writefile({ "#!/bin/sh", ('echo "%s"'):format(v) }, bin .. "/opencode")
+    vim.uv.fs_chmod(bin .. "/opencode", tonumber("755", 8))
+    return h.preflight(o)
+  end
+  check("opencode 2 is accepted", with_version("2.0.22") == nil)
+  check("...with a v in front too", with_version("opencode v2.1.0") == nil)
+  check(
+    "opencode 1 is refused, with the version it found",
+    (with_version("1.18.34") or ""):find("1.18.34", 1, true) ~= nil
+  )
+  check("a version that cannot be read is refused", with_version("garbage") ~= nil)
+  vim.fn.delete(bin .. "/opencode")
+  vim.env.PATH = bin
+  check("no opencode at all is refused", h.preflight(o) ~= nil)
+  vim.env.PATH = path
 end
 
 vim.fn.delete(scratch, "rf")
