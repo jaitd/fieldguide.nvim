@@ -203,6 +203,108 @@ function M.codex_home()
   return home, login
 end
 
+-- Read back from the end of a log in pieces this size: the model is in the
+-- latest turn's opening record, and everything before it is history.
+local TAIL_CHUNK = 64 * 1024
+
+---The model in the last `turn_context` record of the log at `path`, read from
+---the end: a thread resumed many times has a log as long as all its tool
+---output, and the editor waits while it is read.
+---@param path string
+---@return string?
+local function last_turn_model(path)
+  local fd = vim.uv.fs_open(path, "r", 438)
+  if not fd then
+    return nil
+  end
+  local stat = vim.uv.fs_fstat(fd)
+  local pos = stat and stat.size or 0
+  -- The start of a line whose end has been read, carried into the next read.
+  local partial = ""
+  -- Inside a line longer than a read: a tool's output, never a turn_context
+  -- (those are under a kilobyte). Passed over rather than built up, which
+  -- would copy all of it again at every read.
+  local skipping = false
+  local model
+  while pos > 0 and not model do
+    local n = math.min(TAIL_CHUNK, pos)
+    pos = pos - n
+    local chunk = vim.uv.fs_read(fd, n, pos) or ""
+    local buf
+    if skipping then
+      -- The long line starts after this read's last newline, if it has one.
+      -- Found by plain searches: a pattern would backtrack over all of it.
+      local last
+      local at = chunk:find("\n", 1, true)
+      while at do
+        last = at
+        at = chunk:find("\n", at + 1, true)
+      end
+      if last then
+        skipping = false
+        buf = chunk:sub(1, last - 1)
+      end
+    else
+      buf = chunk .. partial
+    end
+    if buf then
+      -- Short of the file's start, the first line is cut: keep it for the next.
+      local cut = pos > 0 and buf:find("\n", 1, true) or nil
+      if pos > 0 and not cut then
+        if #buf > TAIL_CHUNK then
+          partial, skipping = "", true
+        else
+          partial = buf
+        end
+      else
+        partial = cut and buf:sub(1, cut - 1) or ""
+        local lines = vim.split(buf:sub((cut or 0) + 1), "\n", { plain = true })
+        for i = #lines, 1, -1 do
+          local line = lines[i]
+          -- Decoded only where it can matter: the log holds every tool output too.
+          if line:find('"type":"turn_context"', 1, true) then
+            local decoded, record = pcall(vim.json.decode, line)
+            local payload = decoded and type(record) == "table" and record.payload or nil
+            if type(payload) == "table" and type(payload.model) == "string" and payload.model ~= "" then
+              model = payload.model
+              break
+            end
+          end
+        end
+      end
+    end
+  end
+  vim.uv.fs_close(fd)
+  return model
+end
+
+---Each thread's log, once found: the sessions tree is searched once a thread.
+---@type table<string, string>
+local log_of = {}
+
+---The model a thread runs on, as Codex logged it: every turn opens with a
+---`turn_context` record naming it, in the thread's rollout under our own
+---Codex home. `exec --json` never says, so this is the only place to ask.
+---nil until the first turn has begun, or when the log cannot be read.
+---@param thread_id string
+---@return string?
+function M.session_model(thread_id)
+  if type(thread_id) ~= "string" or not thread_id:match("^[%w%-]+$") then
+    return nil
+  end
+  local path = log_of[thread_id]
+  if not path or not vim.uv.fs_stat(path) then
+    local logs =
+      vim.fn.globpath(M.state_dir() .. "/home/sessions", "**/rollout-*-" .. thread_id .. ".jsonl", false, true)
+    path = logs[#logs]
+    if not path then
+      return nil
+    end
+    log_of[thread_id] = path
+  end
+  return last_turn_model(path)
+end
+
 ---Codex's own $HOME, empty. Codex walks ~/.agents/skills, and runs commands
 ---in a login shell that reads ~/.zshrc or ~/.bash_profile: here there are
 ---none of the user's, and nothing in the sandbox's log about the refusal.

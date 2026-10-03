@@ -332,6 +332,32 @@ do
 end
 
 do
+  -- The stream never names the model; the thread's log does, once a turn has
+  -- begun, and the session says it the way an ACP agent does.
+  local asked = {}
+  local s, got = session({
+    model_of = function(thread)
+      table.insert(asked, thread)
+      return "gpt-6-luna"
+    end,
+  })
+  s:prompt("one")
+  wait_settled(got, 1)
+  s:prompt("two")
+  wait_settled(got, 2)
+  local models = of_kind(got, "model")
+  check(
+    "the model the thread runs on is said, once a run",
+    #models == 2 and models[1].model == "gpt-6-luna",
+    vim.inspect(vim.tbl_map(function(e)
+      return e.model
+    end, models))
+  )
+  check("...asked of the thread Codex started", asked[1] == "t-new", vim.inspect(asked))
+  s:stop()
+end
+
+do
   -- A launch with no command to give says why, and nothing is run in its
   -- place: rpc.start with no argv would start pi.
   local s = codex.start({

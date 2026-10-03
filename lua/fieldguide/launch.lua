@@ -320,6 +320,7 @@ function starters.codex(h, o, env)
   return require("fieldguide.rpc.codex").start({
     cwd = o.config_dir,
     session = o.session,
+    model_of = h.session_model,
     -- One process per prompt, each resuming the thread the last one started.
     launch = function(thread)
       local each = vim.tbl_extend("force", o, { session = thread })
