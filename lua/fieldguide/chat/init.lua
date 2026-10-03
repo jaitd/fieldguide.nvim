@@ -1344,8 +1344,17 @@ function M.resume(entry, start_opts)
   M.stop()
   M.open()
   clear_transcript()
+  state.model = nil
   replay(entry.path)
+  -- The model the saved session last named, carried over the start, which
+  -- begins with none: pi names it again only when it next answers.
+  local replayed = state.model
   M.start(vim.tbl_extend("force", { session = entry.id }, start_opts or {}))
+  if replayed and state.session then
+    state.model = replayed
+    state.label = (state.harness ~= "pi" and (state.harness .. " · ") or "") .. replayed
+    set_title()
+  end
   M.focus_prompt()
 end
 

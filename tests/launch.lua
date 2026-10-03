@@ -255,6 +255,23 @@ do
   end, 20)
   check("the title names the model the agent reports", named, winbar())
   chat.stop()
+
+  -- A saved pi session that names its model, resumed with nothing chosen.
+  local saved = scratch .. "/saved-session.jsonl"
+  vim.fn.writefile({
+    vim.json.encode({ type = "message", message = { role = "user", content = "hi" } }),
+    vim.json.encode({
+      type = "message",
+      message = { role = "assistant", model = "saved/model-0", content = { { type = "text", text = "hello" } } },
+    }),
+  }, saved)
+  chat.resume({ id = "saved", path = saved }, { argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  check(
+    "a resumed session's title names the model it last answered with",
+    winbar():find("saved/model-0", 1, true) ~= nil,
+    winbar()
+  )
+  chat.stop()
   launch.choose({ name = "claude", model = "haiku" })
   chat.close()
   chat.open()
