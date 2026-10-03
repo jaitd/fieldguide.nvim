@@ -38,6 +38,43 @@ local function xdg(var, fallback)
   return (value and value ~= "") and value or (home() .. "/" .. fallback)
 end
 
+---@param p string?
+---@return string?
+local function real(p)
+  return p and p ~= "" and vim.uv.fs_realpath(p) or nil
+end
+
+---The node the plugin runs mcp.ts on, and the relay runs as: `o.node`, or
+---PATH's. Resolved, because a version manager's `node/24` is a link to
+---`node/24.x.y`, and inside the agent sandbox only the target is bound.
+---@param o fieldguide.HarnessOpts
+---@return string?
+local function node_bin(o)
+  local node = o.node or vim.fn.exepath("node")
+  if node == "" then
+    return nil
+  end
+  return real(node) or node
+end
+
+---The MCP server opencode is given in ACP's `session/new`. With
+---`o.mcp_socket`, the server runs outside the agent sandbox (`mcp.ts
+-----listen`, started by the editor) and opencode gets the relay: stdio to that
+---socket and nothing else, needing none of the editor's variables. Without
+---one, `o.mcp` is the server itself.
+---@param o fieldguide.HarnessOpts
+---@return table { command, args, env }
+function M.mcp(o)
+  if o.mcp_socket then
+    return {
+      command = node_bin(o) or "node",
+      args = { o.root .. "/extension/mcp.ts", "--relay", o.mcp_socket },
+      env = {},
+    }
+  end
+  return o.mcp
+end
+
 ---Where fieldguide keeps what it generates for opencode, and opencode's own
 ---record of fieldguide's sessions.
 ---@return string
@@ -151,14 +188,15 @@ function M.argv(o)
     end
   end
   -- The session's directory and MCP server travel in ACP's `session/new`,
-  -- not on the command line.
-  return vim.list_extend(argv, { "opencode", "acp" })
+  -- not on the command line. By its real path: the name on PATH is often a
+  -- link outside every zone the agent sandbox binds.
+  return vim.list_extend(argv, { real(vim.fn.exepath("opencode")) or "opencode", "acp" })
 end
 
 ---@param o fieldguide.HarnessOpts
 ---@return table<string, string>
 function M.env(o)
-  return {
+  local env = {
     OPENCODE_CONFIG = M.write_config(o),
     -- Sessions in a database of fieldguide's own: out of the user's opencode
     -- history, and theirs out of this panel's. A private XDG_DATA_HOME would
@@ -177,14 +215,24 @@ function M.env(o)
     OPENCODE_DISABLE_EXTERNAL_SKILLS = "1",
     OPENCODE_DISABLE_AUTOUPDATE = "1",
   }
+  -- The plugin's write hooks run mcp.ts on this node, which the sandbox binds.
+  env.FIELDGUIDE_NODE = node_bin(o)
+  if o.mcp_socket then
+    -- The write hooks ask the server on this socket rather than the editor,
+    -- and nothing in opencode's process tree is handed the editor's address.
+    env.FIELDGUIDE_MCP_SOCKET = o.mcp_socket
+    env.FIELDGUIDE_ADDR = ""
+  end
+  return env
 end
 
 ---What opencode itself must reach inside the agent sandbox.
 ---
 ---The data directory is writable because the credentials live there and are
 ---refreshed in place; the cache holds the ripgrep that grep and glob run.
+---@param o fieldguide.HarnessOpts? the launch options, for the node they name
 ---@return { ro: string[], rw: string[] }
-function M.needs()
+function M.needs(o)
   local ro = {
     require("fieldguide.env").plugin_root(),
     -- Where the user's providers are defined.
@@ -193,6 +241,12 @@ function M.needs()
   local bin = vim.fn.exepath("opencode")
   if bin ~= "" then
     table.insert(ro, vim.fn.fnamemodify(vim.uv.fs_realpath(bin) or bin, ":h"))
+  end
+  -- The node the write hooks and the relay run on; unbound, neither starts,
+  -- and the plugin refuses every write for want of a checkpoint.
+  local node = node_bin(o or {})
+  if node then
+    table.insert(ro, vim.fs.dirname(vim.fs.dirname(node)))
   end
   return {
     ro = ro,

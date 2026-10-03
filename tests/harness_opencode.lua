@@ -97,6 +97,10 @@ do
   check("credentials are not redirected: a refreshed token lands in the real file", env.XDG_DATA_HOME == nil)
 end
 
+-- The launch is by opencode's real path, which the sandbox binds; on a machine
+-- without opencode it stays the bare name.
+local OPENCODE = vim.uv.fs_realpath(vim.fn.exepath("opencode")) or "opencode"
+
 io.write("inherited environment\n")
 do
   -- This suite may itself be running under opencode or Claude Code, which is
@@ -106,7 +110,7 @@ do
       vim.env[name] = nil
     end
   end
-  check("nothing to unset, no wrapper", vim.deep_equal(h.argv(o), { "opencode", "acp" }), vim.inspect(h.argv(o)))
+  check("nothing to unset, no wrapper", vim.deep_equal(h.argv(o), { OPENCODE, "acp" }), vim.inspect(h.argv(o)))
 
   vim.env.OPENCODE_PURE = "1"
   vim.env.OPENCODE_PERMISSION = '{"bash":"allow"}'
@@ -125,7 +129,7 @@ do
       "OPENCODE_PERMISSION",
       "-u",
       "OPENCODE_PURE",
-      "opencode",
+      OPENCODE,
       "acp",
     }),
     vim.inspect(argv)
@@ -149,6 +153,47 @@ do
     return p:match("/opencode$") and p:find("share", 1, true)
   end, needs.rw)
   check("opencode's data directory, with its credentials, is writable in place", #data == 1, vim.inspect(needs.rw))
+end
+
+io.write("through the MCP socket\n")
+do
+  -- Sandboxed: the server runs outside on a socket, and opencode gets the relay.
+  local so = vim.tbl_extend("force", o, { mcp_socket = "/run/fg/mcp.sock" })
+  local relay = h.mcp(so)
+  check(
+    "with a socket, the MCP server opencode is given is the relay to it",
+    relay.args[2] == "--relay" and relay.args[3] == "/run/fg/mcp.sock" and relay.args[1]:find("mcp.ts$") ~= nil,
+    vim.inspect(relay)
+  )
+  check("…which is handed none of the editor's variables", vim.tbl_isempty(relay.env), vim.inspect(relay.env))
+  check("without one, the server in the options is used as it is", vim.deep_equal(h.mcp(o), o.mcp))
+  local env = h.env(so)
+  check("the write hooks are pointed at the socket", env.FIELDGUIDE_MCP_SOCKET == "/run/fg/mcp.sock")
+  check("and nothing in opencode's tree gets the editor's address", env.FIELDGUIDE_ADDR == "")
+  check("without a socket, neither is set", h.env(o).FIELDGUIDE_MCP_SOCKET == nil and h.env(o).FIELDGUIDE_ADDR == nil)
+end
+
+io.write("node\n")
+do
+  -- The plugin runs mcp.ts on node for every write. Unbound, every write hook
+  -- fails to start in the sandbox and every write is refused.
+  local custom = scratch .. "/custom-node"
+  vim.fn.mkdir(custom .. "/bin", "p")
+  vim.fn.writefile({ "#!/bin/sh" }, custom .. "/bin/node")
+  vim.uv.fs_chmod(custom .. "/bin/node", tonumber("755", 8))
+  local co = vim.tbl_extend("force", o, { node = custom .. "/bin/node" })
+  local real = vim.uv.fs_realpath(custom .. "/bin/node")
+  check(
+    "the plugin is told which node to run the hooks on",
+    h.env(co).FIELDGUIDE_NODE == real,
+    h.env(co).FIELDGUIDE_NODE
+  )
+  check(
+    "…and that node's install is what the sandbox binds",
+    vim.tbl_contains(h.needs(co).ro, vim.uv.fs_realpath(custom)),
+    vim.inspect(h.needs(co).ro)
+  )
+  check("the relay runs on it too", h.mcp(vim.tbl_extend("force", co, { mcp_socket = "/s" })).command == real)
 end
 
 vim.fn.delete(scratch, "rf")
