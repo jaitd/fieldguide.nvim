@@ -27,12 +27,15 @@ depends = [
   "test:extension",
   "test:mcp",
   "test:claude-hook",
+  "test:codex-hook",
   "test:opencode",
   "test:plugins",
   "test:unit",
   "test:framing",
   "test:rpc",
   "test:claude",
+  "test:codex",
+  "test:harness-codex",
   "test:acp",
   "test:harness-opencode",
   "test:sink",
@@ -65,6 +68,10 @@ run = "node --test tests/mcp.test.ts"
 description = "The Claude Code hook — the gate, Glob patterns, the write hooks"
 run = "node --test tests/claude-hook.test.ts"
 
+[tasks."test:codex-hook"]
+description = "The Codex hook — the gate on apply_patch, checkpoint and verify around writes"
+run = "node --test tests/codex-hook.test.ts"
+
 [tasks."test:opencode"]
 description = "The opencode plugin — the gate, apply_patch, the write hooks"
 run = "node --test tests/opencode.test.ts"
@@ -88,6 +95,14 @@ run = "nvim -l tests/rpc.lua"
 [tasks."test:claude"]
 description = "Claude stream-json normaliser and launch profile, from a recorded session"
 run = "nvim -l tests/claude.lua"
+
+[tasks."test:codex"]
+description = "Codex exec --json normaliser, from a recorded run, and the session over a process per prompt"
+run = "nvim -l tests/codex.lua"
+
+[tasks."test:harness-codex"]
+description = "The Codex launch profile — argv, env, the binary behind the launcher, preflight"
+run = "nvim -l tests/harness_codex.lua"
 
 [tasks."test:acp"]
 description = "ACP adapter against a scripted agent, session/load included"
