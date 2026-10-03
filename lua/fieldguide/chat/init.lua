@@ -1332,6 +1332,14 @@ function M.start(start_opts)
     M.open()
     return
   end
+  -- The first start with no agent chosen asks which, then starts it. An argv
+  -- given outright (the tests) needs no choosing.
+  if not (start_opts and start_opts.argv) and not require("fieldguide.launch").chosen() then
+    require("fieldguide.onboarding").run(function()
+      M.start(start_opts)
+    end)
+    return
+  end
 
   -- A session that is not running here either went through `M.stop()`, which
   -- already did this, or crashed on its own and left its timer and

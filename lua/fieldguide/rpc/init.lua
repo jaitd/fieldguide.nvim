@@ -26,7 +26,7 @@ local M = {}
 local Session = {}
 Session.__index = Session
 
----@param opts table? { session?: string } an existing session id to carry on
+---@param opts table? { session?: string, provider?: string, model?: string } a session id to carry on; the wizard's model
 ---@return string[]
 function M.argv(opts)
   opts = opts or {}
@@ -67,11 +67,18 @@ function M.argv(opts)
   if opts.session then
     vim.list_extend(argv, { "--session", opts.session })
   end
-  if o.provider then
-    vim.list_extend(argv, { "--provider", o.provider })
+  -- The wizard's answer, when it gave one, is the later word, and it is a
+  -- pair: its model never runs under setup()'s provider, which pi requires to
+  -- agree with it.
+  local provider, model = o.provider, o.model
+  if opts.model then
+    provider, model = opts.provider, opts.model
   end
-  if o.model then
-    vim.list_extend(argv, { "--model", o.model })
+  if provider then
+    vim.list_extend(argv, { "--provider", provider })
+  end
+  if model then
+    vim.list_extend(argv, { "--model", model })
   end
   return argv
 end

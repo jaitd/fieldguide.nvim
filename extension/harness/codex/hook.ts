@@ -27,11 +27,9 @@
 // could rewrite. The server, outside, fingerprints the tree and remembers it.
 
 import { readFileSync } from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { checkAccess, isUnder, resolveTarget, type Decision, type Zones } from "../../gate.ts";
 import { patchPaths } from "../patch.ts";
-import { afterWrite, beforeWrite, hookEnv, treeAfter, treeBefore } from "../write-hooks.ts";
+import { afterWrite, beforeWrite, isMain, hookEnv, treeAfter, treeBefore } from "../write-hooks.ts";
 
 export const MCP_PREFIX = "mcp__fieldguide__";
 
@@ -235,7 +233,7 @@ async function main(mode: string): Promise<void> {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   // Exit 2 is the one failure Codex treats as blocking. Reached only if
   // something throws outside the handled paths above. Not for the reports:
   // to Stop, 2 keeps the agent going, and to UserPromptSubmit it drops the

@@ -322,4 +322,15 @@ if (mode === "--tree-before" && process.env.FAKE_TREE_REFUSE) { console.error("c
     assert.equal(res.status, 0);
     assert.equal(res.stdout.trim(), "ok");
   });
+
+  test("...and run through a symlinked path, the hook still runs", async () => {
+    // A plugin reached through a link: a dotfiles tree, or macOS's /var.
+    const link = path.join(root, "linked-tree");
+    await symlink(tree, link);
+    const res = spawnSync(process.execPath, [path.join(link, "extension/harness/codex/hook.ts"), "check"], {
+      input: "",
+      encoding: "utf8",
+    });
+    assert.equal(res.stdout.trim(), "ok", res.stderr);
+  });
 });

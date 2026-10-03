@@ -144,6 +144,10 @@ M.setup = function(opts)
     desc = "Set the reload level for this session",
   })
 
+  cmd("FieldguideSetup", function()
+    require("fieldguide.onboarding").run()
+  end, { desc = "Choose the agent the panel runs, and its model" })
+
   cmd("FieldguideHarness", function(args)
     local launch = require("fieldguide.launch")
     if args.args == "" then

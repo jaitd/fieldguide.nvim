@@ -39,6 +39,7 @@ depends = [
   "test:acp",
   "test:harness-opencode",
   "test:launch",
+  "test:onboarding",
   "test:sink",
   "test:tools",
   "test:reading",
@@ -108,6 +109,10 @@ run = "nvim -l tests/harness_codex.lua"
 [tasks."test:launch"]
 description = "The launcher: the chosen harness, the MCP server outside the sandbox, a launch through both"
 run = "nvim -l tests/launch.lua"
+
+[tasks."test:onboarding"]
+description = "The setup wizard: the checks, the questions, what is saved, the first start that asks"
+run = "nvim -l tests/onboarding.lua"
 
 [tasks."test:acp"]
 description = "ACP adapter against a scripted agent, session/load included"
