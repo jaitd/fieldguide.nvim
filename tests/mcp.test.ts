@@ -510,6 +510,8 @@ test("over a socket", async (t) => {
 
   // This server's editor is unreachable: every checkpoint and verify fails.
   await t.test("a change whose checkpoint failed is not taken as handled, and is tried again", async () => {
+    // A look first, refused here, so the next is not the first of all.
+    await hookRun(["--tree-before"], inside, configRoot);
     await writeFile(path.join(configRoot, "unhandled.lua"), "return 1\n");
     const first = await hookRun(["--tree-after"], inside, configRoot);
     assert.match(first.stdout, /verify unavailable/);
@@ -796,6 +798,18 @@ test("against a live editor", async (t) => {
     const res = await client.request("tools/call", { name: "nvim_state", arguments: { what: "nvim" } });
     assert.notEqual(res.result.isError, true, res.result.content[0].text);
     assert.equal(await realpath(JSON.parse(res.result.content[0].text).nvim.config_dir), configRoot);
+  });
+
+  // The first look of all, as at Codex's first prompt: the tree as it stands
+  // is the user's, with no earlier look for it to have changed since.
+  await t.test("a first --tree-after takes the tree as it stands as the baseline, and says nothing", async () => {
+    await writeFile(path.join(configRoot, "before-any-turn.lua"), "return 0\n");
+    const res = await hookRun(["--tree-after"], inside, configRoot);
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(res.stdout, "");
+    await writeFile(path.join(configRoot, "in-a-turn.lua"), "return 1\n");
+    const next = await hookRun(["--tree-after"], inside, configRoot);
+    assert.match(next.stdout, /checkpoint [0-9a-f]+/, "a change after it is reported");
   });
 
   await t.test("through the socket, --before-write lets a config write through", async () => {

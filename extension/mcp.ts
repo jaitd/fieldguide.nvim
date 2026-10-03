@@ -394,6 +394,9 @@ async function callTool(session: Session, id: Id, params: Record<string, unknown
 // the agent's reach: a hook runs inside the sandbox, where anything it stored
 // the agent could rewrite.
 let lastTree: string | undefined;
+// Whether any hook has looked yet. Before then there is no "since": the tree
+// as it stands is the user's, to checkpoint as the baseline, not to report.
+let looked = false;
 
 /**
  * Whether a post-write report says the write was handled: checkpointed, and
@@ -415,7 +418,8 @@ function configRoot(): string {
  *
  *   treeBefore  changed since (the user's own edits): checkpoint them now, so
  *               what the agent does next is undoable on its own
- *   treeAfter   changed since: checkpoint and verify, and say so
+ *   treeAfter   changed since: checkpoint and verify, and say so; as the
+ *               first look of all, with no "since", the same as treeBefore
  *
  * Calling either directly grants nothing: the most either does is a
  * checkpoint and a verify. And neither can be talked into skipping a change,
@@ -435,14 +439,16 @@ async function treeHook(session: Session, id: Id, which: "before" | "after") {
   session.inflight.set(id, controller);
   const { signal } = controller;
   try {
+    const first = !looked;
+    looked = true;
     const now = fingerprint(root);
     let result: Record<string, unknown>;
     if (now === lastTree) {
       result = which === "before" ? { allow: true } : { text: "" };
-    } else if (which === "before") {
+    } else if (which === "before" || first) {
       const decision = await beforeWrite(root, signal);
       if (decision.allow) lastTree = now;
-      result = decision;
+      result = which === "before" ? decision : { text: "" };
     } else {
       const text = await afterWrite(root, signal);
       if (handled(text)) lastTree = fingerprint(root);
@@ -464,6 +470,7 @@ async function writeHook(session: Session, id: Id, which: "before" | "after", pa
   }
   // In flight like a tool call, so a hook that hangs up — gave up waiting, or
   // was killed — aborts the checkpoint or verify it asked for.
+  looked = true;
   const controller = new AbortController();
   session.inflight.set(id, controller);
   const { signal } = controller;
