@@ -107,8 +107,18 @@ local function set_title()
   if not (state.out_win and vim.api.nvim_win_is_valid(state.out_win)) then
     return
   end
-  local model = cfg.options.model
-  local right = model and (" " .. (tostring(model):gsub("%%", "%%%%")) .. " ") or ""
+  -- The harness and model the next session starts with, which is the one
+  -- running: a choice changed meanwhile applies from the next start, which
+  -- sets the title again. pi goes unnamed, as it always has.
+  local launch = require("fieldguide.launch")
+  local parts = {}
+  local harness = launch.current().name
+  if harness ~= "pi" then
+    table.insert(parts, harness)
+  end
+  table.insert(parts, launch.model())
+  local label = table.concat(parts, " · ")
+  local right = label ~= "" and (" " .. (label:gsub("%%", "%%%%")) .. " ") or ""
   vim.wo[state.out_win].winbar = "%#FieldguideTitle# " .. NAME .. "%*%=%#FieldguideSession#" .. right
 end
 
@@ -1290,6 +1300,13 @@ end
 ---@param entry table one of `history.list()`
 ---@param start_opts table? passed on to `M.start`, for tests
 function M.resume(entry, start_opts)
+  -- Checked here, not only before the picker opened: the harness can change
+  -- while it is open, and a pi session's id means nothing to another agent.
+  local harness = require("fieldguide.launch").current().name
+  if harness ~= "pi" and not (start_opts and start_opts.argv) then
+    vim.notify(("fieldguide: that is a pi session, and the panel now runs %s"):format(harness), vim.log.levels.WARN)
+    return
+  end
   M.stop()
   M.open()
   clear_transcript()
@@ -1327,6 +1344,7 @@ function M.start(start_opts)
   end
 
   state.session = session
+  set_title()
   state.block = nil
   state.tool_args = {}
   state.unsub = session:on_event(on_event)

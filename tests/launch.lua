@@ -161,6 +161,80 @@ do
   check("one that requires the sandbox is refused", none == nil and refused ~= nil, refused)
 end
 
+io.write("refusals that are not for want of a sandbox\n")
+do
+  local loose = {
+    needs = function()
+      return { ro = {}, rw = {} }
+    end,
+  }
+  if require("fieldguide.sandbox").backend(nil, "agent.sandbox", "test") then
+    -- The editor listening inside the config tree: in the agent's reach.
+    local addr = config_dir .. "/editor.sock"
+    vim.fn.serverstart(addr)
+    local argv, err, why = launch.sandboxed(loose, { mcp_socket = socket }, { "agent" })
+    vim.fn.serverstop(addr)
+    check(
+      "the editor's address in reach stops the launch, even for a harness with a gate of its own",
+      argv == nil and (err or ""):find("editor.sock", 1, true) ~= nil and why == nil,
+      vim.inspect({ argv, err, why })
+    )
+  end
+end
+
+io.write("a runtime directory too long for a socket\n")
+do
+  local long = scratch .. "/" .. string.rep("r", 90)
+  vim.fn.mkdir(long, "p")
+  local saved = vim.env.XDG_RUNTIME_DIR
+  vim.env.XDG_RUNTIME_DIR = long
+  launch.stop_server()
+  local s, err = launch.mcp_socket()
+  vim.env.XDG_RUNTIME_DIR = saved
+  check(
+    "is passed over for one that fits",
+    s ~= nil and #s <= 103 and not vim.startswith(s, long),
+    tostring(s) .. " " .. tostring(err)
+  )
+  socket = s or socket
+end
+
+io.write("the panel\n")
+do
+  local chat = require("fieldguide.chat")
+  local warned = {}
+  local notify = vim.notify
+  vim.notify = function(msg)
+    table.insert(warned, msg)
+  end
+  launch.choose({ name = "claude", model = "haiku" })
+  chat.resume({ id = "pi-session", path = scratch .. "/no-such.jsonl" })
+  vim.notify = notify
+  check(
+    "a pi session is not resumed in another harness",
+    chat._state().session == nil and #warned == 1 and warned[1]:find("pi session", 1, true) ~= nil,
+    vim.inspect(warned)
+  )
+
+  chat.open()
+  local winbar = function()
+    return vim.wo[chat._state().out_win].winbar
+  end
+  check("the title names the harness and its model", winbar():find("claude · haiku", 1, true) ~= nil, winbar())
+  chat.close()
+  launch.choose({ name = "pi" })
+  cfg.options.model = "from/setup"
+  chat.open()
+  check(
+    "...and for pi, setup()'s model, unnamed as before",
+    winbar():find("from/setup", 1, true) ~= nil and winbar():find("pi ·", 1, true) == nil,
+    winbar()
+  )
+  chat.close()
+  cfg.options.model = nil
+  vim.fn.delete(launch.choice_path())
+end
+
 io.write("stopping\n")
 do
   local dir = vim.fs.dirname(socket)

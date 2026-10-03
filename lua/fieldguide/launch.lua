@@ -54,6 +54,17 @@ function M.current()
   return { name = "pi" }
 end
 
+---The model the chosen harness is asked for: the wizard's, or for pi, the
+---one setup() names when the wizard gave none. nil is the harness's own.
+---@return string?
+function M.model()
+  local c = M.current()
+  if c.name == "pi" then
+    return c.model or cfg.options.model
+  end
+  return c.model
+end
+
 ---Whether a choice has been made at all, as opposed to pi by default.
 ---@return boolean
 function M.chosen()
@@ -88,20 +99,32 @@ end
 ---@type { proc: vim.SystemObj, socket: string, dir: string, exited: boolean }?
 local server
 
----A directory of the editor's own for the socket, short enough to bind: a
----unix socket path must fit in 103 bytes, and the state directory often
----does not. Owner-only, as mkdtemp makes it.
+-- A unix socket path must fit in this many bytes, NUL aside: 104 on macOS,
+-- 108 on Linux.
+local SOCKET_PATH_MAX = 103
+local SOCKET_TAIL = "/fieldguide-XXXXXX/mcp.sock"
+
+---A directory of the editor's own for the socket, short enough to bind: the
+---first of the runtime directory, the temp directory and /tmp that leaves
+---room for the socket's name. The state directory rarely does. Owner-only,
+---as mkdtemp makes it.
 ---@return string? dir, string? err
 local function socket_dir()
-  local base = vim.env.XDG_RUNTIME_DIR
-  if not base or base == "" or not vim.uv.fs_stat(base) then
-    base = vim.uv.os_tmpdir()
+  for _, base in ipairs({ vim.env.XDG_RUNTIME_DIR or "", vim.uv.os_tmpdir() or "", "/tmp" }) do
+    -- Resolved: on macOS $TMPDIR is under /var, a link to /private/var, and
+    -- the sandbox profile names the socket by its real path.
+    local real = base ~= "" and vim.uv.fs_realpath(base) or nil
+    if real and #real + #SOCKET_TAIL <= SOCKET_PATH_MAX then
+      local dir, err = vim.uv.fs_mkdtemp(real .. "/fieldguide-XXXXXX")
+      if dir then
+        return dir
+      end
+      if base == "/tmp" then
+        return nil, err
+      end
+    end
   end
-  -- Resolved: on macOS $TMPDIR is under /var, a link to /private/var, and the
-  -- sandbox profile names the socket by its real path.
-  base = vim.uv.fs_realpath(base) or base
-  local dir, err = vim.uv.fs_mkdtemp(base .. "/fieldguide-XXXXXX")
-  return dir, err
+  return nil, "the runtime and temp directories are too long for a socket path, and /tmp is not usable"
 end
 
 ---Stop the MCP server, if this editor started one.
@@ -203,16 +226,27 @@ function M.opts(choice, socket, session)
   }
 end
 
----The harness's argv inside the agent sandbox. Without a sandbox, a harness
----that can do without one runs bare and the caller is told why.
+---The harness's argv inside the agent sandbox. On a machine with no sandbox
+---at all, a harness that can do without one runs bare and the caller is told
+---why. Any other refusal stops the launch: the planner refuses when the
+---editor's own address would be in reach, and running bare would put it in
+---reach all the same.
 ---@param h table the harness profile
 ---@param o fieldguide.HarnessOpts
 ---@param argv string[]
 ---@return string[]? argv, string? err, string? unsandboxed why it runs without the sandbox
 function M.sandboxed(h, o, argv)
+  local sandbox = require("fieldguide.sandbox")
+  local backend, missing = sandbox.backend(o.sandbox, "agent.sandbox", "fieldguide runs this harness sandboxed")
+  if not backend then
+    if h.requires_sandbox then
+      return nil, missing
+    end
+    return argv, nil, missing
+  end
   local p = cfg.paths()
   local needs = h.needs(o)
-  local wrapped, err = require("fieldguide.sandbox").agent_plan(argv, {
+  local wrapped, err = sandbox.agent_plan(argv, {
     config_dir = p.config_dir,
     config_dir_declared = p.config_dir_declared,
     doc_roots = p.doc_roots,
@@ -224,10 +258,7 @@ function M.sandboxed(h, o, argv)
   if wrapped then
     return wrapped
   end
-  if h.requires_sandbox then
-    return nil, err
-  end
-  return argv, nil, err
+  return nil, err
 end
 
 ---@param why string
