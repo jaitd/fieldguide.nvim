@@ -14,13 +14,11 @@
 // past that exits 2, which Claude does treat as blocking. The gate fails closed
 // or it is not a gate.
 
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAccess, isUnder, resolveTarget, type Zones } from "../gate.ts";
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { afterWrite, beforeWrite, hookEnv as env } from "./write-hooks.ts";
 
 // Claude's tool -> the gate's tool. Anything absent is denied outright: the
 // allowlist in --tools is the first line, and this holds if it ever widens.
@@ -136,57 +134,6 @@ export async function decide(ev: HookEvent, zones: Zones): Promise<Decision> {
   }
 
   return checkAccess(tool, gateInput(name, input), zones);
-}
-
-// ---------------------------------------------------------------------------
-// The Neovim side, reached the same way the pi extension reaches it.
-// ---------------------------------------------------------------------------
-
-function env(): {
-  zones: (cwd: string) => Zones;
-  verbs: Set<string>;
-} {
-  const configRoot = process.env.FIELDGUIDE_CONFIG_DIR || "";
-  const docRoots = (process.env.FIELDGUIDE_DOC_ROOTS || "").split(":").filter(Boolean);
-  return {
-    zones: (cwd) => ({ cwd, configRoot, docRoots }),
-    verbs: new Set((process.env.FIELDGUIDE_VERBS || "").split(",").filter(Boolean)),
-  };
-}
-
-const SERVER = path.join(ROOT, "extension", "mcp.ts");
-
-/**
- * The pi extension's own pre-write step, replayed by the MCP server: its gate
- * again, then the tree as it stands committed before the write lands. Without
- * that commit, anything the user changed by hand since the last agent write is
- * folded into the agent's checkpoint, and undoing the agent undoes the user too.
- *
- * Exit 2 is the server's deny. Anything else that is not 0 — a crash, a missing
- * server, a timeout — is a deny too: a write with no checkpoint behind it cannot
- * be undone the way the panel promises.
- */
-function beforeWrite(target: string): Decision {
-  if (!existsSync(SERVER)) return { allow: false, reason: `cannot checkpoint before writing: ${SERVER} is missing` };
-  // Past mcp.ts's own 75s wait on the server, so its refusal arrives first,
-  // and short of Claude's 90s on this hook. See the hook timeouts in
-  // lua/fieldguide/harness/claude.lua for the whole chain.
-  const res = spawnSync(process.execPath, [SERVER, "--before-write", target], { encoding: "utf8", timeout: 80_000 });
-  if (res.status === 0) return { allow: true };
-  const why = (res.stderr || "").trim() || res.error?.message || `exit ${res.status ?? res.signal}`;
-  return { allow: false, reason: res.status === 2 ? why : `cannot checkpoint before writing: ${why}` };
-}
-
-/**
- * Checkpoint and verify, as one paragraph for the model. Failure is content.
- * Empty means the server had nothing to say about this path.
- */
-function afterWrite(target: string): string {
-  if (!existsSync(SERVER)) return `[fieldguide] verify unavailable: ${SERVER} is missing`;
-  // Past mcp.ts's 135s, short of Claude's 150s.
-  const res = spawnSync(process.execPath, [SERVER, "--after-write", target], { encoding: "utf8", timeout: 140_000 });
-  if (res.status === 0) return (res.stdout || "").trim();
-  return `[fieldguide] verify unavailable: ${(res.stderr || "").trim() || res.error?.message || `exit ${res.status}`}`;
 }
 
 /** Whether a PostToolUse event reports a write that happened. */

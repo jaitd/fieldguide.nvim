@@ -183,6 +183,7 @@ describe("the hook process", () => {
       await mkdir(path.join(tree, "extension/harness"), { recursive: true });
       await copyFile(path.join(REPO, "extension/gate.ts"), path.join(tree, "extension/gate.ts"));
       await copyFile(HOOK, path.join(tree, "extension/harness/claude-hook.ts"));
+      await copyFile(path.join(REPO, "extension/harness/write-hooks.ts"), path.join(tree, "extension/harness/write-hooks.ts"));
     });
 
     const hook = () => path.join(tree, "extension/harness/claude-hook.ts");
