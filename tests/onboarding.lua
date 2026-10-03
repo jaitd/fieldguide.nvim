@@ -291,6 +291,66 @@ do
   index.fetch = fetch
 end
 
+io.write("index fetches\n")
+do
+  -- A `node` that takes a moment and reports the index current, so a fetch
+  -- is running while a second is asked for.
+  local bin = scratch .. "/slow-node"
+  vim.fn.mkdir(bin, "p")
+  vim.fn.writefile({ "#!/bin/sh", "sleep 1", [[echo '{"status":"current"}']] }, bin .. "/node")
+  vim.uv.fs_chmod(bin .. "/node", tonumber("755", 8))
+  local path = vim.env.PATH
+  vim.env.PATH = bin .. ":" .. path
+  local index = require("fieldguide.index")
+  local first, second = false, false
+  index.fetch({
+    quiet = true,
+    on_done = function()
+      first = true
+    end,
+  })
+  index.fetch({
+    quiet = true,
+    on_done = function()
+      second = true
+    end,
+  })
+  check("asked while one runs, the second waits for it", not first and not second)
+  vim.wait(10000, function()
+    return first and second
+  end, 20)
+  check("...and both are told when it is over", first and second)
+  vim.env.PATH = path
+end
+
+io.write("pi's model list\n")
+do
+  local real_models = require("fieldguide.harness.pi").models
+  package.loaded["fieldguide.harness.pi"] = nil
+  local fresh = require("fieldguide.harness.pi")
+  local fake = scratch .. "/list-pi"
+  local function lists(lines)
+    vim.fn.writefile(vim.list_extend({ "#!/bin/sh", "cat <<'OUT'" }, vim.list_extend(lines, { "OUT" })), fake)
+    vim.uv.fs_chmod(fake, tonumber("755", 8))
+    cfg.options.cmd = fake
+    return fresh.models()
+  end
+  check('"No models available." is no model', #lists({ "No models available." }) == 0)
+  local models = lists({
+    "provider    model                     context",
+    "openrouter  ~anthropic/claude-haiku-latest  200K",
+    "openai-codex  gpt-5.5  400K",
+  })
+  check(
+    "a table's rows are its models, each with its provider",
+    #models == 2 and models[2].provider == "openai-codex" and models[2].model == "gpt-5.5",
+    vim.inspect(models)
+  )
+  cfg.options.cmd = FAKE
+  package.loaded["fieldguide.harness.pi"] = nil
+  require("fieldguide.harness.pi").models = real_models
+end
+
 onboarding.check = real_check
 vim.fn.delete(scratch, "rf")
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))

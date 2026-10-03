@@ -4,12 +4,27 @@
 // and post-write entry points, reached over its socket when it has one.
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Decision, Zones } from "../gate.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+/**
+ * Whether the module at `url` is the one node was asked to run. By real path
+ * on both sides: node resolves symlinks in the module's own URL but leaves
+ * argv[1] as it was given, so a plugin reached through a link (a dotfiles
+ * tree, macOS's /var) would otherwise never run its hook and fail every check.
+ */
+export function isMain(url: string): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(url));
+  } catch {
+    return false;
+  }
+}
 
 export function hookEnv(): {
   zones: (cwd: string) => Zones;

@@ -9,7 +9,9 @@ set -uo pipefail
 MISSING=0
 # This checkout's fieldguide, with the options the user's config gives it.
 export FIELDGUIDE_DOCTOR_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NVIM_DOCTOR=(nvim --headless -c "luafile $FIELDGUIDE_DOCTOR_ROOT/tests/doctor-env.lua")
+# Named through the environment, not on the command line, where a path with a
+# space in it would be split.
+NVIM_DOCTOR=(nvim --headless -c 'lua dofile(vim.env.FIELDGUIDE_DOCTOR_ROOT .. "/tests/doctor-env.lua")')
 
 row() { # label, found, note
   if [[ -n "$2" ]]; then

@@ -16,6 +16,18 @@ local env = require("fieldguide.env")
 local M = {}
 
 local running = false
+---Whoever is waiting for the fetch in progress to be over.
+---@type fun()[]
+local waiting = {}
+
+---The fetch is over, however it went: everyone waiting on it is told.
+local function release()
+  local was = waiting
+  waiting = {}
+  for _, fn in ipairs(was) do
+    fn()
+  end
+end
 
 ---@return string the index path, whether or not anything is there yet
 function M.path()
@@ -37,15 +49,14 @@ local function describe(outcome)
   return "plugin index: " .. (outcome.reason or "fetch failed"), vim.log.levels.WARN
 end
 
----Fetch or refresh the index. `on_done` is called once it is over, however it
----went, or at once when no fetch was started.
+---Fetch or refresh the index. `on_done` is called once the fetch is over,
+---however it went: this one, or the one already running when this was asked,
+---which this one waits for rather than racing.
 ---@param opts? { quiet?: boolean, max_age_days?: integer, on_done?: fun() }
 function M.fetch(opts)
   opts = opts or {}
-  local function finished()
-    if opts.on_done then
-      opts.on_done()
-    end
+  if opts.on_done then
+    table.insert(waiting, opts.on_done)
   end
   -- Two concurrent fetches would race on the same staging file. The second one
   -- is never the interesting one.
@@ -53,7 +64,6 @@ function M.fetch(opts)
     if not opts.quiet then
       vim.notify("fieldguide: an index fetch is already running", vim.log.levels.INFO)
     end
-    finished()
     return
   end
 
@@ -81,7 +91,7 @@ function M.fetch(opts)
           local why = (res.stderr or ""):gsub("%s+$", "")
           vim.notify("fieldguide: index fetch failed — " .. (why ~= "" and why or "no output"), vim.log.levels.WARN)
         end
-        finished()
+        release()
         return
       end
       local msg, level = describe(outcome)
@@ -91,14 +101,14 @@ function M.fetch(opts)
       if not (opts.quiet and outcome.status ~= "installed") then
         vim.notify("fieldguide: " .. msg, level)
       end
-      finished()
+      release()
     end)
   end)
   if not started then
     if not opts.quiet then
       vim.notify("fieldguide: cannot fetch the index — " .. tostring(err), vim.log.levels.WARN)
     end
-    finished()
+    release()
     return
   end
   running = true

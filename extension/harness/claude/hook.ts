@@ -16,9 +16,8 @@
 
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { checkAccess, isUnder, resolveTarget, type Zones } from "../../gate.ts";
-import { afterWrite, beforeWrite, hookEnv as env } from "../write-hooks.ts";
+import { afterWrite, beforeWrite, isMain, hookEnv as env } from "../write-hooks.ts";
 
 // Claude's tool -> the gate's tool. Anything absent is denied outright: the
 // allowlist in --tools is the first line, and this holds if it ever widens.
@@ -237,7 +236,7 @@ async function main(mode: string): Promise<void> {
   if (out) process.stdout.write(JSON.stringify(out));
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   // Exit 2 is the one failure Claude treats as blocking. Reached only if
   // something throws outside the handled paths above.
   const bail = (err: unknown) => {

@@ -298,6 +298,14 @@ describe("the hook process", () => {
       assert.equal(res.stdout.trim(), "ok");
     });
 
+    test("...and run through a symlinked path, the hook still runs", async () => {
+      // A plugin reached through a link: a dotfiles tree, or macOS's /var.
+      const link = path.join(root, "linked-tree");
+      await symlink(tree, link);
+      const res = runHook(path.join(link, "extension/harness/claude/hook.ts"), "check", "");
+      assert.equal(res.stdout.trim(), "ok", res.stderr);
+    });
+
     test("nothing to verify when verify is not an enabled verb", () => {
       const res = runHook(path.join(tree, "extension/harness/claude/hook.ts"), "post", postEvent("init.lua"), {
         FIELDGUIDE_VERBS: "state",

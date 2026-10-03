@@ -66,11 +66,17 @@ function M.models()
   if not ok or r.code ~= 0 then
     return {}
   end
-  local out = {}
+  -- Rows only after the table's header: anything else pi prints, "No models
+  -- available." among it, is prose, and its first two words are no pair.
+  local out, header = {}, false
   for line in vim.gsplit(r.stdout or "", "\n", { plain = true }) do
-    local provider, model = line:match("^(%S+)%s+(%S+)")
-    if provider and provider ~= "provider" then
-      table.insert(out, { provider = provider, model = model })
+    if not header then
+      header = line:match("^provider%s+model%f[%s]") ~= nil
+    else
+      local provider, model = line:match("^(%S+)%s+(%S+)")
+      if provider then
+        table.insert(out, { provider = provider, model = model })
+      end
     end
   end
   return out
