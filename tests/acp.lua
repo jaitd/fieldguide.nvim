@@ -87,6 +87,15 @@ do
     check(("%s is refused"):format(kind), not granted and outcome.optionId == "r", vim.inspect(outcome))
   end
 
+  -- Only "always" on offer for a kind that is granted: still not granted,
+  -- because an "always" answer outlives the session inside the harness.
+  outcome, granted = acp.permission_outcome({ toolCall = { kind = "edit" }, options = { options[1], options[3] } })
+  check(
+    "an edit offered only allow_always is cancelled, not granted for good",
+    not granted and outcome.outcome == "cancelled",
+    vim.inspect(outcome)
+  )
+
   outcome, granted = acp.permission_outcome({ toolCall = { kind = "execute" }, options = { options[1] } })
   check(
     "no reject option: cancelled, never granted",
@@ -161,6 +170,9 @@ local function run(opts)
 
   local want = #(opts.prompts or {})
   local finished = vim.wait(30000, function()
+    if opts.done then
+      return opts.done(collected)
+    end
     if want == 0 then
       return #of_kind(collected, "response") >= 2
     end
@@ -375,6 +387,40 @@ do
     return e.source == "acp"
   end, of_kind(events, "error"))
   check("...and the reader is told", #said == 1)
+end
+
+do
+  -- Advertises session/load, then rejects it: the prompt waiting behind the
+  -- handshake must still run, in a new session, and the reader is told.
+  local events, sent3 = run({ session = "sess-gone", env = { FAKE_LOAD_FAILS = "1" }, prompts = { "still there?" } })
+  check("a failed load falls back to a new session", find_sent(sent3, function(m)
+    return m.method == "session/new"
+  end) ~= nil)
+  check("...and the queued prompt runs in it", find_sent(sent3, function(m)
+    return m.method == "session/prompt" and m.params.sessionId == "sess-new"
+  end) ~= nil)
+  local said = vim.tbl_filter(function(e)
+    return e.source == "acp" and e.message:find("session not found", 1, true) ~= nil
+  end, of_kind(events, "error"))
+  check("...and the reader is told why", #said == 1, vim.inspect(of_kind(events, "error")))
+end
+
+do
+  -- No session to be had at all: the queued prompt is not left waiting on a
+  -- handshake that will never finish. It is reported, and the run settles.
+  local events = run({
+    session = "sess-gone",
+    env = { FAKE_LOAD_FAILS = "1", FAKE_NEW_FAILS = "1" },
+    prompts = { "anyone?" },
+    done = function(collected)
+      return #of_kind(collected, "settled") >= 1
+    end,
+  })
+  local said = vim.tbl_filter(function(e)
+    return e.source == "acp" and e.message:find("no model configured", 1, true) ~= nil
+  end, of_kind(events, "error"))
+  check("no session at all is said, with the agent's reason", #said >= 1, vim.inspect(of_kind(events, "error")))
+  check("...and the waiting prompt is settled, not stranded", #of_kind(events, "settled") >= 1)
 end
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))

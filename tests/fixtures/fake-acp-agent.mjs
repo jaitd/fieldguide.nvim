@@ -10,7 +10,9 @@
 // Everything the client sends is appended to <log>, one JSON object per line,
 // so a test can assert on the replies as well as on the events.
 //
-//   FAKE_NO_LOAD=1   advertise no session/load, to exercise the fallback
+//   FAKE_NO_LOAD=1     advertise no session/load, to exercise the fallback
+//   FAKE_LOAD_FAILS=1  advertise session/load, then reject it
+//   FAKE_NEW_FAILS=1   reject session/new too: no session can be had at all
 
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -127,9 +129,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       emit({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: !process.env.FAKE_NO_LOAD }, authMethods: [] } });
       break;
     case "session/new":
-      emit({ id: m.id, result: { sessionId: "sess-new" } });
+      if (process.env.FAKE_NEW_FAILS) emit({ id: m.id, error: { code: -32603, message: "no model configured" } });
+      else emit({ id: m.id, result: { sessionId: "sess-new" } });
       break;
     case "session/load":
+      if (process.env.FAKE_LOAD_FAILS) {
+        emit({ id: m.id, error: { code: -32002, message: "session not found" } });
+        break;
+      }
       replay(m.params.sessionId);
       emit({ id: m.id, result: null });
       break;

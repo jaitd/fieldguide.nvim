@@ -153,8 +153,11 @@ function M.permission_outcome(params)
   local granted = M.GRANTED_KINDS[call.kind or "other"] == true
 
   -- Once, never always: an "always" answer can outlive this session inside the
-  -- harness's own settings, where fieldguide can no longer see it.
-  local wanted = granted and { "allow_once", "allow_always" } or { "reject_once", "reject_always" }
+  -- harness's own settings, where fieldguide can no longer see it. An agent
+  -- that offers only "always" is cancelled below rather than granted for
+  -- good. A lasting refusal is kept as a fallback: it can only narrow what
+  -- the harness does.
+  local wanted = granted and { "allow_once" } or { "reject_once", "reject_always" }
   for _, kind in ipairs(wanted) do
     for _, option in ipairs(type(options) == "table" and options or {}) do
       if option.kind == kind then
@@ -569,6 +572,7 @@ end
 ---@field private _next_sub integer
 ---@field private _next_id integer
 ---@field private _queue string[] prompts waiting for a session, or for the turn before them
+---@field private _start_error string? why no session could be had, once that is known
 ---@field private _in_flight integer? the id of the prompt now running
 ---@field private _ready boolean
 ---@field private _opts table
@@ -699,8 +703,25 @@ function Session:_after(e)
       end
       self:_request(M.session_new, { opts.cwd, opts.mcp })
     end
+  elseif e.kind == "response" and e.command == "session/load" and not e.success then
+    -- Advertised and then refused: an expired or deleted session, most often.
+    -- The questions waiting behind the handshake still deserve an answer, in a
+    -- new context, said out loud like the no-load case above.
+    self._norm.replaying = false
+    self._norm.session_id = nil
+    self:_emit({
+      kind = "error",
+      source = "acp",
+      message = ("could not resume the session (%s); starting a new one"):format(tostring(e.error)),
+      raw = {},
+    })
+    self:_request(M.session_new, { opts.cwd, opts.mcp })
   elseif e.kind == "response" and (e.command == "session/new" or e.command == "session/load") then
     self._ready = e.success
+    if not e.success then
+      self:_fail_start(e.error)
+      return
+    end
     self:_drain()
   elseif e.kind == "settled" and self._in_flight then
     self._in_flight = nil
@@ -727,6 +748,20 @@ function Session:_answer(e)
   -- fs/* and terminal/* were never advertised; anything else is newer than
   -- this adapter. Either way the agent gets an answer and does not stall.
   self:_write(M.error_reply(e.id, M.METHOD_NOT_FOUND, ("fieldguide does not provide %s"):format(e.method)))
+end
+
+---No session can be had. Every prompt waiting for one is told so and settled,
+---rather than left queued behind a handshake that is over, and later ones are
+---refused at once.
+---@param why string?
+function Session:_fail_start(why)
+  self._start_error = ("the agent did not start a session: %s"):format(tostring(why or "no reason given"))
+  local waiting = #self._queue
+  self._queue = {}
+  self:_emit({ kind = "error", source = "acp", message = self._start_error, raw = {} })
+  if waiting > 0 then
+    self:_emit({ kind = "settled", raw = {} })
+  end
 end
 
 ---Send the next queued prompt, if the session is up and nothing is running.
@@ -765,6 +800,9 @@ end
 function Session:prompt(message, _opts)
   if not self:is_running() then
     return nil, "the agent process has exited"
+  end
+  if self._start_error then
+    return nil, self._start_error
   end
   table.insert(self._queue, message)
   vim.schedule(function()
