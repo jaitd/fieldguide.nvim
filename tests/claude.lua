@@ -533,6 +533,21 @@ check(
   tostring(env.CLAUDE_CONFIG_DIR)
 )
 check("…and it is what the sandbox binds", vim.tbl_contains(h.needs().rw, env.CLAUDE_CONFIG_DIR))
+
+do
+  -- A node other than PATH's: the gate hook and the MCP relay both run on it,
+  -- so it is the install the sandbox has to bind, or neither can start.
+  local custom = scratch .. "/custom-node"
+  vim.fn.mkdir(custom .. "/bin", "p")
+  vim.fn.writefile({ "#!/bin/sh" }, custom .. "/bin/node")
+  vim.uv.fs_chmod(custom .. "/bin/node", tonumber("755", 8))
+  local ro = h.needs(vim.tbl_extend("force", o, { node = custom .. "/bin/node" })).ro
+  check(
+    "a node set in the options is the install the sandbox binds",
+    vim.tbl_contains(ro, vim.uv.fs_realpath(custom)),
+    vim.inspect(ro)
+  )
+end
 -- Not /tmp/claude-<uid>, which every other Claude session of the user's uses.
 check(
   "Claude's temp dir is our own, and bound writable",

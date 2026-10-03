@@ -349,8 +349,9 @@ function M.env(o)
 end
 
 ---What Claude itself needs to be able to reach inside an agent sandbox.
+---@param o fieldguide.HarnessOpts? the launch options, for the node they name
 ---@return { ro: string[], rw: string[] }
-function M.needs()
+function M.needs(o)
   local ro, rw = {}, {}
   local function add(list, p)
     if p and exists(p) and not vim.tbl_contains(list, p) then
@@ -362,7 +363,10 @@ function M.needs()
   -- only: it is what an update would write, and updates are off.
   local bin = real(vim.fn.exepath("claude"))
   add(ro, bin and vim.fs.dirname(bin) or nil)
-  local node = real(vim.fn.exepath("node"))
+  -- The node the gate hook and the MCP relay run on, which is `o.node` when
+  -- one is set: bind PATH's instead and neither can start in here. The gate
+  -- then fails closed and refuses every tool.
+  local node = node_bin(o or {})
   add(ro, node and vim.fs.dirname(vim.fs.dirname(node)) or nil)
   -- Created here too: the sandbox is planned before or after argv() writes
   -- into it, and a zone that does not exist yet would be dropped.
