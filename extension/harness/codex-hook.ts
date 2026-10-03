@@ -2,6 +2,8 @@
 //
 //   node extension/harness/codex-hook.ts pre    < hook event on stdin
 //   node extension/harness/codex-hook.ts post   < hook event on stdin
+//   node extension/harness/codex-hook.ts stop   < Stop event on stdin
+//   node extension/harness/codex-hook.ts prompt < UserPromptSubmit event on stdin
 //
 // Codex has no file tools of its own beyond `apply_patch`: it reads, and can
 // write, through its shell, and a hook sees a shell call only as a command
@@ -14,6 +16,7 @@
 //   Bash              allowed, the sandbox bounding it; checkpoint and verify
 //                     after any command that changed the config tree
 //   (end of turn)     the same, for a write a backgrounded command made later
+//   (next prompt)     the same, for anything changed since the last look
 //   mcp__fieldguide__ our own verbs, narrowed on the Neovim side
 //
 // Anything else is refused. A refusal is exit 2 with the reason on stderr,
@@ -161,19 +164,41 @@ async function main(mode: string): Promise<void> {
   // looked is checkpointed and verified now. Codex shows a Stop hook's output
   // nowhere, so a report goes to the model as a block: the turn carries on
   // just long enough for it to answer. Once only: a turn this hook already
-  // kept going (`stop_hook_active`) is let end, whatever the tree says.
+  // kept going (`stop_hook_active`) is let end without looking, so a later
+  // change stays unhandled on the server and the next prompt reports it.
   if (mode === "stop") {
     let active = false;
     try {
       active = (JSON.parse(readFileSync(0, "utf8")) as { stop_hook_active?: boolean }).stop_hook_active === true;
     } catch {}
-    if (!hookEnv().verbs.has("verify")) return;
+    if (active || !hookEnv().verbs.has("verify")) return;
     const text = treeAfter();
-    if (text && !active) {
+    if (text) {
       process.stdout.write(
         JSON.stringify({
           decision: "block",
           reason: `A write to the config was found after your last tool call, and checked:\n${text}`,
+        }),
+      );
+    }
+    return;
+  }
+  // A new prompt: whatever changed since the last look, a write the end of
+  // the last turn let pass or the user's own edits, is checkpointed and
+  // verified, and the report goes in with the prompt.
+  if (mode === "prompt") {
+    try {
+      readFileSync(0);
+    } catch {}
+    if (!hookEnv().verbs.has("verify")) return;
+    const text = treeAfter();
+    if (text) {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: `The config changed since the last turn, and was checked:\n${text}`,
+          },
         }),
       );
     }
@@ -212,10 +237,13 @@ async function main(mode: string): Promise<void> {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // Exit 2 is the one failure Codex treats as blocking. Reached only if
-  // something throws outside the handled paths above.
+  // something throws outside the handled paths above. Not for the reports:
+  // to Stop, 2 keeps the agent going, and to UserPromptSubmit it drops the
+  // user's prompt.
+  const report = process.argv[2] === "stop" || process.argv[2] === "prompt";
   const bail = (err: unknown) => {
     process.stderr.write(`${DENY_PREFIX}${String(err)}\n`);
-    process.exit(2);
+    process.exit(report ? 1 : 2);
   };
   process.on("uncaughtException", bail);
   process.on("unhandledRejection", bail);

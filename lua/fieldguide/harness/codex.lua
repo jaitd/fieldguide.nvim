@@ -303,6 +303,12 @@ function M.argv(o)
     return ('[{matcher=".*",hooks=[{type="command",command=%s,timeout=%d}]}]'):format(q(cmd), timeout)
   end
 
+  -- A hook that reports rather than gates: no matcher, and no `|| exit 2`.
+  local function report(mode)
+    local cmd = ("%s %s %s"):format(vim.fn.shellescape(node), vim.fn.shellescape(hook_path(o)), mode)
+    return ('[{hooks=[{type="command",command=%s,timeout=150}]}]'):format(q(cmd))
+  end
+
   local argv = { M.binary(o) or "codex", "exec" }
   if o.session then
     table.insert(argv, "resume")
@@ -331,9 +337,11 @@ function M.argv(o)
     -- last hook looked. No `|| exit 2` here: to a Stop hook, 2 means "keep
     -- going", and a check that failed must not keep the agent running.
     "-c",
-    ('hooks.Stop=[{hooks=[{type="command",command=%s,timeout=150}]}]'):format(
-      q(("%s %s stop"):format(vim.fn.shellescape(node), vim.fn.shellescape(hook_path(o))))
-    ),
+    "hooks.Stop=" .. report("stop"),
+    -- And at the start of the next prompt, for a change the end of the last
+    -- turn let pass. Not `|| exit 2` either: that would drop the prompt.
+    "-c",
+    "hooks.UserPromptSubmit=" .. report("prompt"),
     "-c",
     "mcp_servers.fieldguide.command=" .. q(node),
     "-c",

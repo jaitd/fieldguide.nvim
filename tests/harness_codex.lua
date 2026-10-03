@@ -102,6 +102,12 @@ do
     stop:find("codex-hook.ts' stop\"", 1, true) ~= nil and stop:find("|| exit 2", 1, true) == nil,
     stop
   )
+  local ups = config(argv, "hooks.UserPromptSubmit") or ""
+  check(
+    "and at the start of each prompt, never dropping it",
+    ups:find("codex-hook.ts' prompt\"", 1, true) ~= nil and ups:find("|| exit 2", 1, true) == nil,
+    ups
+  )
   check(
     "Codex waits out the hooks' own waits on the server",
     pre:find("timeout=90", 1, true) and post:find("timeout=150", 1, true),

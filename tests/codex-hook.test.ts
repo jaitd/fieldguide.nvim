@@ -276,11 +276,38 @@ if (mode === "--tree-before" && process.env.FAKE_TREE_REFUSE) { console.error("c
     assert.match(out.reason, /checkpoint def/);
   });
 
-  test("...and never twice: a turn kept going by this hook is let end", async () => {
+  test("...and never twice: a turn kept going by this hook is let end, without looking", async () => {
+    // A look here would advance the server's baseline past a change whose
+    // report could go nowhere; left alone, the next prompt reports it.
     await reset();
     const res = stop({ stop_hook_active: true }, { FAKE_TREE_CHANGED: "1" });
+    assert.equal(res.status, 0, res.stderr);
     assert.equal(res.stdout, "");
-    assert.deepEqual(await calls(), ["--tree-after"], "the tree is still checked");
+    assert.deepEqual(await calls(), []);
+  });
+
+  const prompt = (env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, [hook(), "prompt"], {
+      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: "hi" }),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", FIELDGUIDE_CONFIG_DIR: zones.configRoot, FIELDGUIDE_VERBS: "state,verify", ...env },
+    });
+
+  test("a new prompt checks the tree, and says nothing when nothing changed", async () => {
+    await reset();
+    const res = prompt();
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout, "");
+    assert.deepEqual(await calls(), ["--tree-after"]);
+  });
+
+  test("...and a change since the last turn goes in with the prompt", async () => {
+    await reset();
+    const res = prompt({ FAKE_TREE_CHANGED: "1" });
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout).hookSpecificOutput;
+    assert.equal(out.hookEventName, "UserPromptSubmit");
+    assert.match(out.additionalContext, /checkpoint def/);
   });
 
   test("without verify, the shell and patches run with no server calls", async () => {
