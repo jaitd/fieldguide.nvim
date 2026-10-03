@@ -71,6 +71,35 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+io.write("the model\n")
+do
+  local n = acp.normalizer()
+  n:expect(2, "session/new")
+  local options = {
+    { id = "model", category = "model", type = "select", currentValue = "opencode-go/kimi-k3", options = {} },
+  }
+  local out = n:normalize({ jsonrpc = "2.0", id = 2, result = { sessionId = "s-1", configOptions = options } })
+  check(
+    "the model a new session reports is said, before the response",
+    #out == 2 and out[1].kind == "model" and out[1].model == "opencode-go/kimi-k3" and out[2].kind == "response",
+    vim.inspect(kinds(out))
+  )
+  options[1].currentValue = "opencode-go/glm-5.3"
+  out = n:normalize({
+    jsonrpc = "2.0",
+    method = "session/update",
+    params = { sessionId = "s-1", update = { sessionUpdate = "config_option_update", configOptions = options } },
+  })
+  check("...and a change to it", #out == 1 and out[1].kind == "model" and out[1].model == "opencode-go/glm-5.3")
+  out = n:normalize({
+    jsonrpc = "2.0",
+    method = "session/update",
+    params = { sessionId = "s-1", update = { sessionUpdate = "config_option_update", configOptions = {} } },
+  })
+  check("an update with no model in it is still quiet", #out == 0, vim.inspect(kinds(out)))
+end
+
+-- ---------------------------------------------------------------------------
 io.write("permission policy\n")
 -- ---------------------------------------------------------------------------
 do

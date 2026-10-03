@@ -245,6 +245,17 @@ do
     winbar()
   )
   chat.stop()
+
+  -- The model pi names in its own messages, with nothing chosen anywhere.
+  launch.choose({ name = "pi" })
+  chat.start({ argv = { root .. "/tests/fixtures/fake-agent.sh", "1" }, cwd = root })
+  chat._state().session:prompt("hi")
+  local named = vim.wait(10000, function()
+    return winbar():find("fake/model-1", 1, true) ~= nil
+  end, 20)
+  check("the title names the model the agent reports", named, winbar())
+  chat.stop()
+  launch.choose({ name = "claude", model = "haiku" })
   chat.close()
   chat.open()
   check("...and the next choice once that session is over", winbar():find("claude · haiku", 1, true) ~= nil, winbar())

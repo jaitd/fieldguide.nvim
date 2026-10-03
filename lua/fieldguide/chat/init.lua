@@ -117,6 +117,24 @@ local function next_label()
   return table.concat(parts, " · ")
 end
 
+---The model the agent says it is running, from the events that carry one:
+---pi's assistant messages, Claude's run start and messages, opencode's
+---config options. Codex says none, and keeps the one it was started with.
+---@param event fieldguide.Event
+---@return string?
+local function reported_model(event)
+  local model
+  if event.kind == "model" or event.kind == "run_start" then
+    model = event.model
+  elseif event.kind == "message_start" or event.kind == "message_end" then
+    local m = event.message
+    if type(m) == "table" and (m.role == nil or m.role == "assistant") then
+      model = m.model
+    end
+  end
+  return type(model) == "string" and model ~= "" and model or nil
+end
+
 local function set_title()
   if not (state.out_win and vim.api.nvim_win_is_valid(state.out_win)) then
     return
@@ -591,6 +609,15 @@ local release_timer_and_sub
 local function on_event(event)
   local s = state.sink
   local k = event.kind
+
+  -- The model answering is the one the agent names, which is often its own
+  -- default rather than anything fieldguide was told.
+  local model = reported_model(event)
+  if model and model ~= state.model then
+    state.model = model
+    state.label = (state.harness ~= "pi" and (state.harness .. " · ") or "") .. model
+    set_title()
+  end
 
   if k == "text_delta" then
     s:write(open_prose("text", event.text))
@@ -1359,6 +1386,8 @@ function M.start(start_opts)
   end
 
   state.session = session
+  state.harness = require("fieldguide.launch").current().name
+  state.model = nil
   state.label = next_label()
   set_title()
   state.block = nil

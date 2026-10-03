@@ -330,6 +330,23 @@ local QUIET = {
   usage_update = true,
 }
 
+---The model a harness says it is running, from the config options it reports
+---(opencode's `configOptions`, category "model"). nil when it says none.
+---@param options any
+---@return string?
+local function current_model(options)
+  if type(options) ~= "table" then
+    return nil
+  end
+  for _, option in ipairs(options) do
+    if type(option) == "table" and (option.category == "model" or option.id == "model") then
+      local value = option.currentValue
+      return type(value) == "string" and value ~= "" and value or nil
+    end
+  end
+  return nil
+end
+
 ---@class fieldguide.AcpNormalizer
 ---@field private _requests table<string, string> id -> method, awaiting a response
 ---@field private _calls table<string, { tool: string?, kind: string?, args: table, started: boolean, ended: boolean }>
@@ -471,6 +488,8 @@ function Normalizer:_on_update(update, raw)
     vim.list_extend(out, self:_on_tool(update, raw))
   elseif k == "plan" then
     table.insert(out, { kind = "status", what = "plan", text = "planning", raw = raw })
+  elseif k == "config_option_update" and current_model(update.configOptions) then
+    table.insert(out, { kind = "model", model = current_model(update.configOptions), raw = raw })
   elseif not QUIET[k] then
     table.insert(out, { kind = "unknown", note = "session/update." .. tostring(k), raw = raw })
   end
@@ -503,6 +522,12 @@ function Normalizer:_on_response(msg)
     return out
   end
 
+  if (method == "session/new" or method == "session/load") and not failure then
+    local model = current_model(result.configOptions)
+    if model then
+      table.insert(out, { kind = "model", model = model, raw = msg })
+    end
+  end
   if method == "initialize" and not failure then
     self.capabilities = type(result.agentCapabilities) == "table" and result.agentCapabilities or {}
   elseif method == "session/new" and not failure then
