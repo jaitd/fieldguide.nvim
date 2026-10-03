@@ -25,12 +25,25 @@ HOLD="${2:-0}"
 # lands inside the other. A 20KB line is many write(2)s, and a reply that slips
 # between them corrupts both lines. mkdir either makes the directory or
 # fails, which makes it a lock with nothing to install.
-LOCK=$(mktemp -d "${TMPDIR:-/tmp}/fake-agent.XXXXXX")/lock
-trap 'rm -rf "${LOCK%/lock}"' EXIT
+LOCKDIR=$(mktemp -d "${TMPDIR:-/tmp}/fake-agent.XXXXXX") || {
+  echo "fake-agent: cannot create a lock directory under ${TMPDIR:-/tmp}" >&2
+  exit 1
+}
+LOCK=$LOCKDIR/lock
+trap 'rm -rf "$LOCKDIR"' EXIT
 
 # Takes its arguments as printf does, so the U+2028 line can use escapes.
 emitf() {
-  until mkdir "$LOCK" 2>/dev/null; do sleep 0.001; done
+  until mkdir "$LOCK" 2>/dev/null; do
+    # The other writer holding the lock clears by waiting. A lock directory
+    # that has gone does not, and spinning on it would hang the test instead
+    # of failing it.
+    if [ ! -d "$LOCKDIR" ]; then
+      echo "fake-agent: $LOCKDIR is gone; cannot take the write lock" >&2
+      exit 1
+    fi
+    sleep 0.001
+  done
   # shellcheck disable=SC2059
   printf "$@"
   rmdir "$LOCK"
