@@ -119,7 +119,7 @@ async function listen(sock: string, env: Record<string, string>) {
   let stderr = "";
   proc.stderr!.setEncoding("utf8").on("data", (d: string) => (stderr += d));
   const exited = new Promise<number | null>((resolve) => proc.on("close", (code) => resolve(code)));
-  for (let i = 0; i < 100 && !stderr.includes("MCP on"); i++) await sleep(50);
+  for (let i = 0; i < 100 && !stderr.includes("MCP on") && proc.exitCode === null; i++) await sleep(50);
   return { proc, exited, stderr: () => stderr };
 }
 
@@ -550,6 +550,87 @@ test("over a socket", async (t) => {
     t.after(() => client.kill());
     assert.equal((await client.initialize()).result.serverInfo.name, "fieldguide");
   });
+});
+
+test("a socket that is not this server's", async (t) => {
+  await t.test("is left alone when the server shuts down", async () => {
+    // Someone else's socket now sits at the path this server bound: removing
+    // it on the way out would cut off a server that is still running.
+    const sock = path.join(root, "replaced.sock");
+    const first = await listen(sock, base);
+    await rm(sock);
+    const other = createServer(() => {});
+    await new Promise<void>((resolve) => other.listen(sock, resolve));
+    t.after(() => other.close());
+    first.proc.stdin!.end();
+    assert.equal(await first.exited, 0);
+    assert.ok((await lstat(sock)).isSocket(), "the other server's socket must survive");
+  });
+
+  await t.test("means this server is unreachable, so it exits", async () => {
+    const sock = path.join(root, "orphan.sock");
+    const orphan = await listen(sock, base);
+    t.after(() => orphan.proc.kill("SIGKILL"));
+    await rm(sock);
+    const code = await Promise.race([orphan.exited, sleep(5000).then(() => "still running")]);
+    assert.equal(code, 0);
+    assert.match(orphan.stderr(), /no longer this server's/);
+  });
+
+  await t.test("is never taken from a server that won the race for a stale one", async () => {
+    // Several servers asked for the same dead socket at once: whichever binds
+    // it must stay reachable, and every other one must step aside.
+    for (let round = 0; round < 3; round++) {
+      const stale = path.join(root, `race-${round}.sock`);
+      const dead = await listen(stale, base);
+      dead.proc.kill("SIGKILL");
+      await dead.exited;
+      const racers = await Promise.all([0, 1, 2, 3, 4].map(() => listen(stale, base)));
+      t.after(() => racers.forEach((r) => r.proc.kill("SIGKILL")));
+      await sleep(300);
+      const running = racers.filter((r) => r.proc.exitCode === null);
+      assert.equal(running.length, 1, `round ${round}: exactly one server keeps running`);
+      const client = new Client({ FIELDGUIDE_MCP_SOCKET: stale }, root, ["--relay", stale]);
+      t.after(() => client.kill());
+      assert.equal((await client.initialize()).result.serverInfo.name, "fieldguide", `round ${round}: and it is reachable`);
+    }
+  });
+});
+
+test("a write hook given up on", async (t) => {
+  // The hook stops waiting, and the checkpoint and verify it asked for must
+  // stop too, rather than run on behind a result nobody will read.
+  const pidFile = path.join(root, "hook-hung.pid");
+  const fake = path.join(root, "hook-hung-nvim");
+  await writeFile(fake, `#!/bin/sh\necho $$ > ${pidFile}\nexec sleep 60\n`);
+  await chmod(fake, 0o755);
+  const sock = path.join(root, "hook-hung.sock");
+  const server = await listen(sock, { ...base, FIELDGUIDE_NVIM: fake });
+  t.after(() => server.proc.kill("SIGKILL"));
+
+  for (const which of ["--before-write", "--after-write"]) {
+    await t.test(`${which}: the editor-side work is abandoned with it`, async () => {
+      await rm(pidFile, { force: true });
+      const res = await hookRun(
+        [which, path.join(configRoot, "init.lua")],
+        { FIELDGUIDE_MCP_SOCKET: sock, FIELDGUIDE_HOOK_TIMEOUT_MS: "1500" },
+        configRoot,
+      );
+      assert.equal(res.code, which === "--before-write" ? 2 : 0, res.stderr);
+      assert.ok(existsSync(pidFile), "the server should have started the checkpoint");
+      const pid = Number((await readFile(pidFile, "utf8")).trim());
+      let alive = true;
+      for (let i = 0; i < 40 && alive; i++) {
+        await sleep(50);
+        try {
+          process.kill(pid, 0);
+        } catch {
+          alive = false;
+        }
+      }
+      assert.equal(alive, false, "the hung checkpoint must be killed");
+    });
+  }
 });
 
 test("cancellation", async (t) => {

@@ -123,14 +123,16 @@ function writeEvent(target: string) {
   return { toolName: "write", input: { path: target }, content: [], isError: false };
 }
 
-async function beforeWrite(target: string): Promise<BeforeWrite> {
-  const decision = (await hook("tool_call", writeEvent(target))) as { block?: boolean; reason?: string } | undefined;
+async function beforeWrite(target: string, signal?: AbortSignal): Promise<BeforeWrite> {
+  const decision = (await hook("tool_call", writeEvent(target), signal)) as
+    | { block?: boolean; reason?: string }
+    | undefined;
   return decision?.block ? { allow: false, reason: decision.reason ?? "blocked" } : { allow: true };
 }
 
 /** Empty means nothing to report: a path outside the config tree, or verify disabled. */
-async function afterWrite(target: string): Promise<string> {
-  const result = (await hook("tool_result", writeEvent(target))) as ToolResult | undefined;
+async function afterWrite(target: string, signal?: AbortSignal): Promise<string> {
+  const result = (await hook("tool_result", writeEvent(target), signal)) as ToolResult | undefined;
   return (result?.content ?? []).map((c) => c.text ?? "").join("\n");
 }
 
@@ -184,9 +186,15 @@ function askServer(
   });
 }
 
-// Clear of the editor-side backstop (FIELDGUIDE_CALL_TIMEOUT_MS, 60s by
-// default) plus a verify's own 15s, so the server answers first when it can.
-const HOOK_TIMEOUT_MS = Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 90_000;
+// Clear of what the server may spend, so it answers first when it can: each
+// verb has the editor-side backstop (FIELDGUIDE_CALL_TIMEOUT_MS, 60s by
+// default), a pre-write runs one (the checkpoint) and a post-write two (the
+// checkpoint, then verify). A hook that gives up anyway closes its connection,
+// and the server abandons the work rather than finish it for nobody.
+const HOOK_TIMEOUT_MS = {
+  "--before-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 75_000,
+  "--after-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 135_000,
+};
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -209,7 +217,12 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
     let decision: BeforeWrite;
     try {
       if (socketPath) {
-        decision = (await askServer(socketPath, "fieldguide/beforeWrite", target, HOOK_TIMEOUT_MS)) as BeforeWrite;
+        decision = (await askServer(
+          socketPath,
+          "fieldguide/beforeWrite",
+          target,
+          HOOK_TIMEOUT_MS["--before-write"],
+        )) as BeforeWrite;
       } else {
         await loadExtension();
         decision = await beforeWrite(target);
@@ -230,7 +243,7 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
   let text: string;
   try {
     if (socketPath) {
-      const result = await askServer(socketPath, "fieldguide/afterWrite", target, HOOK_TIMEOUT_MS);
+      const result = await askServer(socketPath, "fieldguide/afterWrite", target, HOOK_TIMEOUT_MS["--after-write"]);
       text = typeof result.text === "string" ? result.text : "";
     } else {
       await loadExtension();
@@ -359,11 +372,19 @@ async function writeHook(session: Session, id: Id, which: "before" | "after", pa
     session.fail(id, -32602, "path must be absolute");
     return;
   }
+  // In flight like a tool call, so a hook that hangs up — gave up waiting, or
+  // was killed — aborts the checkpoint or verify it asked for.
+  const controller = new AbortController();
+  session.inflight.set(id, controller);
+  const { signal } = controller;
   try {
-    const result = which === "before" ? await beforeWrite(target) : { text: await afterWrite(target) };
-    session.send({ id, result });
+    const result =
+      which === "before" ? await beforeWrite(target, signal) : { text: await afterWrite(target, signal) };
+    if (!signal.aborted) session.send({ id, result });
   } catch (err) {
-    session.fail(id, -32603, message(err));
+    if (!signal.aborted) session.fail(id, -32603, message(err));
+  } finally {
+    session.inflight.delete(id);
   }
 }
 
@@ -467,29 +488,64 @@ function serveStdio() {
   attach(session, process.stdin, () => setTimeout(() => process.exit(0), 2000).unref());
 }
 
-/**
- * Takes over a path only when it is a dead socket: a live one is another
- * server, and anything else is not ours to delete.
- */
-async function clearStale(socketPath: string): Promise<string | null> {
-  let stat;
+type Identity = { dev: number; ino: number };
+
+/** Which file a path names right now, or null if it names none. */
+function identity(p: string): Identity | null {
   try {
-    stat = lstatSync(socketPath);
+    const { dev, ino } = lstatSync(p);
+    return { dev, ino };
   } catch {
     return null;
   }
-  if (!stat.isSocket()) return `${socketPath} exists and is not a socket`;
-  const live = await new Promise<boolean>((resolve) => {
-    const probe = createConnection(socketPath);
-    probe.on("connect", () => {
-      probe.destroy();
-      resolve(true);
+}
+
+function same(a: Identity | null, b: Identity | null): boolean {
+  return !!a && !!b && a.dev === b.dev && a.ino === b.ino;
+}
+
+/**
+ * Removes the path only if it still names the file that was looked at. Between
+ * a look and an unlink another server may have bound a socket of its own
+ * there, and unlinking that would leave it running with nobody able to reach
+ * it.
+ */
+function unlinkIfSame(p: string, seen: Identity): boolean {
+  if (!same(identity(p), seen)) return false;
+  try {
+    unlinkSync(p);
+  } catch {}
+  return true;
+}
+
+/**
+ * Takes over a path only when it is a dead socket: a live one is another
+ * server, and anything else is not ours to delete. Looked at again if it
+ * changed while being probed: someone else got there first, and what they
+ * left is decided on its own merits.
+ */
+async function clearStale(socketPath: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let stat;
+    try {
+      stat = lstatSync(socketPath);
+    } catch {
+      return null;
+    }
+    if (!stat.isSocket()) return `${socketPath} exists and is not a socket`;
+    const seen = { dev: stat.dev, ino: stat.ino };
+    const live = await new Promise<boolean>((resolve) => {
+      const probe = createConnection(socketPath);
+      probe.on("connect", () => {
+        probe.destroy();
+        resolve(true);
+      });
+      probe.on("error", () => resolve(false));
     });
-    probe.on("error", () => resolve(false));
-  });
-  if (live) return `${socketPath} is already being served`;
-  unlinkSync(socketPath);
-  return null;
+    if (live) return `${socketPath} is already being served`;
+    if (unlinkIfSame(socketPath, seen)) return null;
+  }
+  return `${socketPath} kept changing while it was being taken over`;
 }
 
 // sun_path is 104 bytes on macOS and 108 on Linux, NUL included. Past that the
@@ -505,11 +561,12 @@ async function serveSocket(socketPath: string) {
     );
     process.exit(1);
   }
-  const refusal = await clearStale(socketPath);
-  if (refusal) {
-    process.stderr.write(`fieldguide: ${refusal}\n`);
+  const refuse = (why: string) => {
+    process.stderr.write(`fieldguide: ${why}\n`);
     process.exit(1);
-  }
+  };
+  const refusal = await clearStale(socketPath);
+  if (refusal) refuse(refusal);
 
   const server = createServer((conn: Socket) => {
     conn.setEncoding("utf8");
@@ -530,21 +587,37 @@ async function serveSocket(socketPath: string) {
       server.once("error", reject);
       server.listen(socketPath, () => resolve());
     });
+  } catch (err) {
+    // Another server bound the path between the stale socket going and this
+    // bind: it is the one being served now.
+    if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") refuse(`${socketPath} is already being served`);
+    throw err;
   } finally {
     process.umask(previous);
   }
   chmodSync(socketPath, 0o600);
+  // The socket this server bound. Only this one is ever removed on the way out.
+  const own = identity(socketPath);
 
   let closing = false;
   const shutdown = () => {
     if (closing) return;
     closing = true;
-    server.close();
-    try {
-      unlinkSync(socketPath);
-    } catch {}
+    // Not server.close(): libuv unlinks a listening socket's path when it
+    // closes it, whatever file is there by then. Exiting drops the
+    // connections all the same, and the path is removed only if it is ours.
+    if (own) unlinkIfSame(socketPath, own);
     process.exit(0);
   };
+  // A server whose socket is gone, or is now another server's, can never be
+  // reached again. It goes rather than run on as an orphan, and leaves the
+  // path to whoever holds it.
+  setInterval(() => {
+    if (closing || same(identity(socketPath), own)) return;
+    process.stderr.write(`fieldguide: ${socketPath} is no longer this server's; exiting\n`);
+    closing = true;
+    process.exit(0);
+  }, 1000).unref();
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   process.on("SIGHUP", shutdown);
