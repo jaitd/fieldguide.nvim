@@ -289,6 +289,21 @@ function Session:answer_ui(id, value, cancelled)
   }, { expect_response = false })
 end
 
+---Hand a one-shot agent its whole input and close stdin, which is how it
+---knows the input is complete (`codex exec -` reads its prompt this way).
+---@param text string
+---@return boolean ok
+function Session:input(text)
+  if self._stopped or not self._proc then
+    return false
+  end
+  local ok = pcall(function()
+    self._proc:write(text)
+    self._proc:write(nil)
+  end)
+  return ok
+end
+
 ---@return boolean
 function Session:is_running()
   return not self._stopped
