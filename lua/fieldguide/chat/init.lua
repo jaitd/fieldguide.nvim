@@ -103,13 +103,10 @@ end
 ---The transcript's winbar is the panel's nameplate: which tool this is, and
 ---which model is answering. It never changes, which is what makes the prompt's
 ---winbar readable as activity rather than as decoration.
-local function set_title()
-  if not (state.out_win and vim.api.nvim_win_is_valid(state.out_win)) then
-    return
-  end
-  -- The harness and model the next session starts with, which is the one
-  -- running: a choice changed meanwhile applies from the next start, which
-  -- sets the title again. pi goes unnamed, as it always has.
+---The harness and model the next start will run. pi goes unnamed, as it
+---always has.
+---@return string
+local function next_label()
   local launch = require("fieldguide.launch")
   local parts = {}
   local harness = launch.current().name
@@ -117,7 +114,17 @@ local function set_title()
     table.insert(parts, harness)
   end
   table.insert(parts, launch.model())
-  local label = table.concat(parts, " · ")
+  return table.concat(parts, " · ")
+end
+
+local function set_title()
+  if not (state.out_win and vim.api.nvim_win_is_valid(state.out_win)) then
+    return
+  end
+  -- What the running session was started with, kept at its start: a choice
+  -- made meanwhile applies only from the next session, and the title must not
+  -- name it while another agent answers. With no session, the next start.
+  local label = state.session and state.session:is_running() and state.label or next_label()
   local right = label ~= "" and (" " .. (label:gsub("%%", "%%%%")) .. " ") or ""
   vim.wo[state.out_win].winbar = "%#FieldguideTitle# " .. NAME .. "%*%=%#FieldguideSession#" .. right
 end
@@ -1344,6 +1351,7 @@ function M.start(start_opts)
   end
 
   state.session = session
+  state.label = next_label()
   set_title()
   state.block = nil
   state.tool_args = {}

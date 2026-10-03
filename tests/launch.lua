@@ -232,6 +232,23 @@ do
   )
   chat.close()
   cfg.options.model = nil
+
+  -- A session running under one choice, and another made meanwhile.
+  launch.choose({ name = "pi", model = "first/model" })
+  chat.start({ argv = { root .. "/tests/fixtures/fake-agent.sh", "1", "30" }, cwd = root })
+  launch.choose({ name = "claude", model = "haiku" })
+  chat.close()
+  chat.open()
+  check(
+    "reopened mid-session, the title names the agent answering, not the next choice",
+    winbar():find("first/model", 1, true) ~= nil and winbar():find("claude", 1, true) == nil,
+    winbar()
+  )
+  chat.stop()
+  chat.close()
+  chat.open()
+  check("...and the next choice once that session is over", winbar():find("claude · haiku", 1, true) ~= nil, winbar())
+  chat.close()
   vim.fn.delete(launch.choice_path())
 end
 
