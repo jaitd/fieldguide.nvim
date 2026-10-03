@@ -11,7 +11,8 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -35,8 +36,9 @@ class Client {
   readonly received: Json[] = [];
   readonly exited: Promise<number | null>;
 
-  constructor(env: Record<string, string>, cwd = ROOT) {
-    this.proc = spawn(process.execPath, [SERVER], {
+  /** `args` picks the mode: none is the stdio server, `--relay <sock>` its socket twin. */
+  constructor(env: Record<string, string>, cwd = ROOT, args: string[] = []) {
+    this.proc = spawn(process.execPath, [SERVER, ...args], {
       cwd,
       env: { ...process.env, ...env },
       stdio: ["pipe", "pipe", "pipe"],
@@ -103,6 +105,22 @@ class Client {
   kill() {
     this.proc.kill("SIGKILL");
   }
+}
+
+/**
+ * The server as the editor will run it: outside the sandbox, on a socket, with
+ * a pipe on stdin that ties its life to the caller's.
+ */
+async function listen(sock: string, env: Record<string, string>) {
+  const proc = spawn(process.execPath, [SERVER, "--listen", sock], {
+    env: { ...process.env, ...env },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  let stderr = "";
+  proc.stderr!.setEncoding("utf8").on("data", (d: string) => (stderr += d));
+  const exited = new Promise<number | null>((resolve) => proc.on("close", (code) => resolve(code)));
+  for (let i = 0; i < 100 && !stderr.includes("MCP on") && proc.exitCode === null; i++) await sleep(50);
+  return { proc, exited, stderr: () => stderr };
 }
 
 function hookRun(args: string[], env: Record<string, string>, cwd: string) {
@@ -389,6 +407,239 @@ test("notifications", async (t) => {
   });
 });
 
+test("over a socket", async (t) => {
+  const sock = path.join(root, "mcp.sock");
+  const server = await listen(sock, base);
+  t.after(() => server.proc.kill("SIGKILL"));
+  // Inside the sandbox none of the editor's variables exist; the relay and the
+  // hooks must not need them.
+  const inside = { FIELDGUIDE_ADDR: "", FIELDGUIDE_BIN: "", FIELDGUIDE_CONFIG_DIR: "", FIELDGUIDE_MCP_SOCKET: sock };
+
+  await t.test("the socket is the owner's alone", async () => {
+    assert.equal((await stat(sock)).mode & 0o777, 0o600);
+  });
+
+  await t.test("a relay carries a whole MCP session", async () => {
+    const client = new Client(inside, root, ["--relay", sock]);
+    t.after(() => client.kill());
+    const init = await client.initialize();
+    assert.equal(init.result.serverInfo.name, "fieldguide");
+    const list = await client.request("tools/list");
+    assert.ok(list.result.tools.some((tool: Json) => tool.name === "nvim_state"));
+  });
+
+  await t.test("the write hooks are not offered as tools", async () => {
+    const client = new Client(inside, root, ["--relay", sock]);
+    t.after(() => client.kill());
+    await client.initialize();
+    const names = (await client.request("tools/list")).result.tools.map((tool: Json) => tool.name);
+    assert.ok(!names.some((name: string) => name.includes("Write")), names.join(", "));
+  });
+
+  await t.test("two sessions at once keep their own ids", async () => {
+    const a = new Client(inside, root, ["--relay", sock]);
+    const b = new Client(inside, root, ["--relay", sock]);
+    t.after(() => (a.kill(), b.kill()));
+    await Promise.all([a.initialize(), b.initialize()]);
+    // Both use id 2 next; each must get its own answer back.
+    const [pa, lb] = await Promise.all([a.request("ping"), b.request("tools/list")]);
+    assert.deepEqual(pa.result, {});
+    assert.ok(Array.isArray(lb.result.tools));
+  });
+
+  await t.test("a relay with nothing to reach says so and exits", async () => {
+    const res = await hookRun(["--relay", path.join(root, "absent.sock")], inside, root);
+    assert.equal(res.code, 1);
+    assert.match(res.stderr, /no fieldguide server is listening/);
+  });
+
+  await t.test("a pre-write the server refuses is exit 2, with its reason", async () => {
+    const res = await hookRun(["--before-write", path.join(docRoot, "x.txt")], inside, configRoot);
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /doc zone is read-only/);
+  });
+
+  await t.test("a path the agent made in its own /tmp is refused out here", async () => {
+    // Inside, /tmp is a tmpfs: whatever the agent built there does not exist on
+    // the real filesystem, which is the one the gate decides on.
+    const res = await hookRun(["--before-write", "/tmp/fieldguide-agent-only/init.lua"], inside, configRoot);
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /outside fieldguide's zones/);
+  });
+
+  await t.test("a relative path is taken against the hook's cwd", async () => {
+    const res = await hookRun(["--before-write", "../../outside.txt"], inside, configRoot);
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /outside fieldguide's zones/);
+  });
+
+  await t.test("a pre-write with no server to ask refuses, with exit 2", async () => {
+    const res = await hookRun(
+      ["--before-write", "init.lua"],
+      { ...inside, FIELDGUIDE_MCP_SOCKET: path.join(root, "absent.sock") },
+      configRoot,
+    );
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /cannot vet this write/);
+  });
+
+  await t.test("a pre-write the server never answers refuses, with exit 2", async () => {
+    // A socket that accepts and then says nothing: a wedged server.
+    const mute = path.join(root, "mute.sock");
+    const silent = createServer(() => {});
+    await new Promise<void>((resolve) => silent.listen(mute, resolve));
+    t.after(() => silent.close());
+    const res = await hookRun(
+      ["--before-write", "init.lua"],
+      { ...inside, FIELDGUIDE_MCP_SOCKET: mute, FIELDGUIDE_HOOK_TIMEOUT_MS: "500" },
+      configRoot,
+    );
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /no answer/);
+  });
+
+  await t.test("an after-write with no server to ask is content, not a failure", async () => {
+    const res = await hookRun(
+      ["--after-write", path.join(configRoot, "init.lua")],
+      { ...inside, FIELDGUIDE_MCP_SOCKET: path.join(root, "absent.sock") },
+      configRoot,
+    );
+    assert.equal(res.code, 0);
+    assert.match(res.stdout, /^\[fieldguide\] verify unavailable/);
+  });
+
+  await t.test("a live server is not taken over by a second", async () => {
+    const second = await listen(sock, base);
+    assert.equal(await second.exited, 1);
+    assert.match(second.stderr(), /already being served/);
+  });
+
+  await t.test("a socket path too long to bind says so, rather than EINVAL", async () => {
+    const long = path.join(root, "x".repeat(120) + ".sock");
+    const res = await listen(long, base);
+    assert.equal(await res.exited, 1);
+    assert.match(res.stderr(), /must fit in \d+/);
+  });
+
+  await t.test("a file that is not a socket is never deleted", async () => {
+    const plain = path.join(root, "plain.file");
+    await writeFile(plain, "mine\n");
+    const other = await listen(plain, base);
+    assert.equal(await other.exited, 1);
+    assert.match(other.stderr(), /not a socket/);
+    assert.equal(await readFile(plain, "utf8"), "mine\n");
+  });
+
+  await t.test("the server goes, and takes its socket, when its caller does", async () => {
+    server.proc.stdin!.end();
+    assert.equal(await server.exited, 0);
+    assert.equal(existsSync(sock), false);
+  });
+
+  await t.test("a stale socket left behind is replaced", async () => {
+    // A server killed outright leaves its socket file with nobody behind it.
+    const stale = path.join(root, "stale.sock");
+    const dead = await listen(stale, base);
+    dead.proc.kill("SIGKILL");
+    await dead.exited;
+    assert.ok((await lstat(stale)).isSocket(), "the killed server should leave its socket behind");
+    const fresh = await listen(stale, base);
+    t.after(() => fresh.proc.kill("SIGKILL"));
+    assert.match(fresh.stderr(), /MCP on/);
+    const client = new Client(inside, root, ["--relay", stale]);
+    t.after(() => client.kill());
+    assert.equal((await client.initialize()).result.serverInfo.name, "fieldguide");
+  });
+});
+
+test("a socket that is not this server's", async (t) => {
+  await t.test("is left alone when the server shuts down", async () => {
+    // Someone else's socket now sits at the path this server bound: removing
+    // it on the way out would cut off a server that is still running.
+    const sock = path.join(root, "replaced.sock");
+    const first = await listen(sock, base);
+    await rm(sock);
+    const other = createServer(() => {});
+    await new Promise<void>((resolve) => other.listen(sock, resolve));
+    t.after(() => other.close());
+    first.proc.stdin!.end();
+    assert.equal(await first.exited, 0);
+    assert.ok((await lstat(sock)).isSocket(), "the other server's socket must survive");
+  });
+
+  await t.test("means this server is unreachable, so it exits", async () => {
+    const sock = path.join(root, "orphan.sock");
+    const orphan = await listen(sock, base);
+    t.after(() => orphan.proc.kill("SIGKILL"));
+    await rm(sock);
+    const code = await Promise.race([orphan.exited, sleep(5000).then(() => "still running")]);
+    assert.equal(code, 0);
+    assert.match(orphan.stderr(), /no longer this server's/);
+  });
+
+  await t.test("is never taken from a server that won the race for a stale one", async () => {
+    // Several servers asked for the same dead socket at once: whichever binds
+    // it must stay reachable, and every other one must step aside.
+    for (let round = 0; round < 3; round++) {
+      const stale = path.join(root, `race-${round}.sock`);
+      const dead = await listen(stale, base);
+      dead.proc.kill("SIGKILL");
+      await dead.exited;
+      const racers = await Promise.all([0, 1, 2, 3, 4].map(() => listen(stale, base)));
+      t.after(() => racers.forEach((r) => r.proc.kill("SIGKILL")));
+      await sleep(300);
+      const running = racers.filter((r) => r.proc.exitCode === null);
+      assert.equal(running.length, 1, `round ${round}: exactly one server keeps running`);
+      const client = new Client({ FIELDGUIDE_MCP_SOCKET: stale }, root, ["--relay", stale]);
+      t.after(() => client.kill());
+      assert.equal((await client.initialize()).result.serverInfo.name, "fieldguide", `round ${round}: and it is reachable`);
+    }
+  });
+});
+
+test("a write hook given up on", async (t) => {
+  // The hook stops waiting, and the checkpoint and verify it asked for must
+  // stop too, rather than run on behind a result nobody will read.
+  const pidFile = path.join(root, "hook-hung.pid");
+  const fake = path.join(root, "hook-hung-nvim");
+  // Appended, not overwritten: a post-write runs two verbs, and every process
+  // the server started has to be gone, not only the last.
+  await writeFile(fake, `#!/bin/sh\necho $$ >> ${pidFile}\nexec sleep 60\n`);
+  await chmod(fake, 0o755);
+  const sock = path.join(root, "hook-hung.sock");
+  const server = await listen(sock, { ...base, FIELDGUIDE_NVIM: fake });
+  t.after(() => server.proc.kill("SIGKILL"));
+
+  for (const which of ["--before-write", "--after-write"]) {
+    await t.test(`${which}: the editor-side work is abandoned with it`, async () => {
+      await rm(pidFile, { force: true });
+      const res = await hookRun(
+        [which, path.join(configRoot, "init.lua")],
+        { FIELDGUIDE_MCP_SOCKET: sock, FIELDGUIDE_HOOK_TIMEOUT_MS: "1500" },
+        configRoot,
+      );
+      assert.equal(res.code, which === "--before-write" ? 2 : 0, res.stderr);
+      assert.ok(existsSync(pidFile), "the server should have started the checkpoint");
+      const isAlive = (pid: number) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      let alive: number[] = [];
+      for (let i = 0; i < 40; i++) {
+        await sleep(50);
+        const pids = (await readFile(pidFile, "utf8")).split("\n").filter(Boolean).map(Number);
+        alive = pids.filter(isAlive);
+        if (alive.length === 0) break;
+      }
+      assert.deepEqual(alive, [], "every verb the server started for the hook must be killed");
+    });
+  }
+});
+
 test("cancellation", async (t) => {
   // A stand-in for `nvim -l`: records its pid, then hangs, the way a verb does
   // when the editor sits on a confirm() prompt.
@@ -519,5 +770,36 @@ test("against a live editor", async (t) => {
     const res = await hookRun(["--before-write"], env, configRoot);
     assert.equal(res.code, 2);
     assert.match(res.stderr, /needs a path/);
+  });
+
+  // The sandboxed shape: the server outside with the editor's variables, and
+  // the relay and hooks inside with none of them.
+  const mcpSock = path.join(root, "live-mcp.sock");
+  const server = await listen(mcpSock, env);
+  t.after(() => server.proc.kill("SIGKILL"));
+  const inside = { FIELDGUIDE_ADDR: "", FIELDGUIDE_BIN: "", FIELDGUIDE_CONFIG_DIR: "", FIELDGUIDE_MCP_SOCKET: mcpSock };
+
+  await t.test("through the relay, a verb reaches the editor", async () => {
+    const client = new Client(inside, root, ["--relay", mcpSock]);
+    t.after(() => client.kill());
+    await client.initialize();
+    const res = await client.request("tools/call", { name: "nvim_state", arguments: { what: "nvim" } });
+    assert.notEqual(res.result.isError, true, res.result.content[0].text);
+    assert.equal(await realpath(JSON.parse(res.result.content[0].text).nvim.config_dir), configRoot);
+  });
+
+  await t.test("through the socket, --before-write lets a config write through", async () => {
+    const res = await hookRun(["--before-write", "lua/via-socket.lua"], inside, configRoot);
+    assert.equal(res.code, 0, res.stderr);
+  });
+
+  await t.test("through the socket, --after-write checkpoints and verifies", async () => {
+    const target = path.join(configRoot, "lua", "via-socket.lua");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "return 2\n");
+    const res = await hookRun(["--after-write", target], inside, configRoot);
+    assert.equal(res.code, 0, res.stderr);
+    assert.match(res.stdout, /^\[fieldguide\] (boot OK|boot FAILED|boot TIMED OUT|verify unavailable)/);
+    assert.match(res.stdout, /checkpoint [0-9a-f]+ \(undo with :FieldguideUndo\)/);
   });
 });

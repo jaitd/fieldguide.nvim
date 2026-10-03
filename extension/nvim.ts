@@ -50,6 +50,13 @@ function callVerb(verb: string, args: Record<string, unknown>, signal?: AbortSig
       resolve({ ok: false, error: "FIELDGUIDE_BIN is unset — launch the agent via :Fieldguide" });
       return;
     }
+    // Already given up on — the second verb of a post-write whose hook hung up
+    // during the first. spawn() would start the client anyway and only kill it
+    // a tick later; better not to start it.
+    if (signal?.aborted) {
+      resolve({ ok: false, error: `${verb} was cancelled` });
+      return;
+    }
     const child = spawn(NVIM, ["-l", CLIENT, "--json", JSON.stringify({ verb, args })], {
       env: { ...process.env, FIELDGUIDE_ADDR: ADDR },
       stdio: ["ignore", "pipe", "pipe"],

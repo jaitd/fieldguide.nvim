@@ -1,8 +1,17 @@
 // fieldguide's MCP server: the same verbs, for harnesses that are not pi.
 //
 //   node extension/mcp.ts                        stdio MCP server
+//   node extension/mcp.ts --listen <socket>      the same server, on a unix socket
+//   node extension/mcp.ts --relay [socket]       stdio <-> socket, for inside the sandbox
 //   node extension/mcp.ts --before-write <path>  gate + checkpoint, for a pre-write hook
 //   node extension/mcp.ts --after-write <path>   checkpoint + verify, for a post-write hook
+//
+// When the agent runs sandboxed, the server runs *outside*, with --listen, and
+// only its socket is bound in. The harness launches --relay as its MCP server,
+// and the two hooks, seeing FIELDGUIDE_MCP_SOCKET, ask the server rather than
+// the editor. Neovim's own socket never enters the sandbox: it speaks the whole
+// Neovim API, and an agent with a shell could run any Lua there, outside the
+// sandbox, with it. This socket speaks the verbs and nothing else.
 //
 // This file is a protocol adapter and nothing else. It hosts the pi extension
 // (nvim.ts) behind a stand-in for pi's ExtensionAPI and speaks MCP on its
@@ -17,7 +26,9 @@
 // Zero dependencies, like the rest of the extension: newline-delimited
 // JSON-RPC over stdio is small enough to speak by hand.
 
+import { chmodSync, fstatSync, lstatSync, mkdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { createConnection, createServer, type Socket } from "node:net";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -73,20 +84,27 @@ type Handler = (event: Record<string, unknown>, ctx: Record<string, unknown>) =>
 const tools = new Map<string, Tool>();
 const handlers = new Map<string, Handler[]>();
 
-const { default: extension } = (await import("./nvim.ts")) as { default: (pi: unknown) => void };
-extension({
-  registerTool: (tool: Tool) => tools.set(tool.name, tool),
-  on: (name: string, fn: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), fn]),
-});
+/**
+ * Only the modes that talk to the editor load the extension. The relay and the
+ * socket-mode hooks run inside the sandbox, where there is no editor to reach
+ * and nothing of nvim.ts should be.
+ */
+async function loadExtension() {
+  const { default: extension } = (await import("./nvim.ts")) as { default: (pi: unknown) => void };
+  extension({
+    registerTool: (tool: Tool) => tools.set(tool.name, tool),
+    on: (name: string, fn: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), fn]),
+  });
 
-// pi's notices go to its UI; ours have nowhere to go but stderr, which every
-// harness keeps in its MCP server log. Silence would read as the index simply
-// not existing.
-const ui = {
-  notify: (message: string) => process.stderr.write(message + "\n"),
-  setStatus: () => {},
-};
-for (const fn of handlers.get("session_start") ?? []) await fn({}, { ui });
+  // pi's notices go to its UI; ours have nowhere to go but stderr, which every
+  // harness keeps in its MCP server log. Silence would read as the index simply
+  // not existing.
+  const ui = {
+    notify: (message: string) => process.stderr.write(message + "\n"),
+    setStatus: () => {},
+  };
+  for (const fn of handlers.get("session_start") ?? []) await fn({}, { ui });
+}
 
 async function hook(name: string, event: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
   const [fn] = handlers.get(name) ?? [];
@@ -99,6 +117,89 @@ async function hook(name: string, event: Record<string, unknown>, signal?: Abort
 // the same thing whichever harness asked for them.
 // ---------------------------------------------------------------------------
 
+type BeforeWrite = { allow: true } | { allow: false; reason: string };
+
+function writeEvent(target: string) {
+  return { toolName: "write", input: { path: target }, content: [], isError: false };
+}
+
+async function beforeWrite(target: string, signal?: AbortSignal): Promise<BeforeWrite> {
+  const decision = (await hook("tool_call", writeEvent(target), signal)) as
+    | { block?: boolean; reason?: string }
+    | undefined;
+  return decision?.block ? { allow: false, reason: decision.reason ?? "blocked" } : { allow: true };
+}
+
+/** Empty means nothing to report: a path outside the config tree, or verify disabled. */
+async function afterWrite(target: string, signal?: AbortSignal): Promise<string> {
+  const result = (await hook("tool_result", writeEvent(target), signal)) as ToolResult | undefined;
+  return (result?.content ?? []).map((c) => c.text ?? "").join("\n");
+}
+
+/**
+ * The hook's side of a socket: one request, one answer, then close. The path
+ * is made absolute here, against the cwd the agent saw, and resolved again by
+ * the server against the real filesystem — the one the gate decides on. See
+ * `writeHook` for why the two views differing can only fail closed.
+ */
+function askServer(
+  socketPath: string,
+  method: string,
+  target: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const conn = createConnection(socketPath);
+    let buffer = "";
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      fn();
+    };
+    const timer = setTimeout(
+      () => settle(() => reject(new Error(`no answer from ${socketPath} within ${timeoutMs / 1000}s`))),
+      timeoutMs,
+    );
+    conn.setEncoding("utf8");
+    conn.on("connect", () => {
+      conn.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { path: path.resolve(target) } }) + "\n");
+    });
+    conn.on("data", (chunk: string) => {
+      buffer += chunk;
+      const nl = buffer.indexOf("\n");
+      if (nl < 0) return;
+      settle(() => {
+        try {
+          const message = JSON.parse(buffer.slice(0, nl));
+          if (message.error) reject(new Error(message.error.message ?? "server error"));
+          else resolve(message.result ?? {});
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    conn.on("error", (err) => settle(() => reject(err)));
+    conn.on("close", () => settle(() => reject(new Error(`${socketPath} closed without an answer`))));
+  });
+}
+
+// Clear of what the server may spend, so it answers first when it can: each
+// verb has the editor-side backstop (FIELDGUIDE_CALL_TIMEOUT_MS, 60s by
+// default), a pre-write runs one (the checkpoint) and a post-write two (the
+// checkpoint, then verify). A hook that gives up anyway closes its connection,
+// and the server abandons the work rather than finish it for nobody.
+const HOOK_TIMEOUT_MS = {
+  "--before-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 75_000,
+  "--after-write": Number(process.env.FIELDGUIDE_HOOK_TIMEOUT_MS) || 135_000,
+};
+
+function message(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function runHook(which: string, target: string | undefined): Promise<number> {
   if (!target) {
     process.stderr.write(`fieldguide: ${which} needs a path\n`);
@@ -106,23 +207,51 @@ async function runHook(which: string, target: string | undefined): Promise<numbe
     // but 2 as a hook that failed without blocking, and writes anyway.
     return which === "--before-write" ? 2 : 1;
   }
-  const event = { toolName: "write", input: { path: target }, content: [], isError: false };
+  const socketPath = process.env.FIELDGUIDE_MCP_SOCKET;
 
   if (which === "--before-write") {
     // Deny is exit 2 with the reason on stderr: the convention Claude Code's
-    // hooks use, and the easiest for any other harness's hook to map.
-    const decision = (await hook("tool_call", event)) as { block?: boolean; reason?: string } | undefined;
-    if (decision?.block) {
-      process.stderr.write((decision.reason ?? "blocked") + "\n");
+    // hooks use, and the easiest for any other harness's hook to map. So is a
+    // server that cannot be reached or does not answer: a write nobody vetted
+    // is not one to let through.
+    let decision: BeforeWrite;
+    try {
+      if (socketPath) {
+        decision = (await askServer(
+          socketPath,
+          "fieldguide/beforeWrite",
+          target,
+          HOOK_TIMEOUT_MS["--before-write"],
+        )) as BeforeWrite;
+      } else {
+        await loadExtension();
+        decision = await beforeWrite(target);
+      }
+    } catch (err) {
+      process.stderr.write(`fieldguide: cannot vet this write: ${message(err)}\n`);
+      return 2;
+    }
+    if (decision.allow !== true) {
+      process.stderr.write(((decision as { reason?: string }).reason ?? "blocked") + "\n");
       return 2;
     }
     return 0;
   }
 
-  // Nothing printed means nothing to report: a path outside the config tree,
-  // or verify disabled. A failed boot is content, not an error, so exit 0.
-  const result = (await hook("tool_result", event)) as ToolResult | undefined;
-  const text = (result?.content ?? []).map((c) => c.text ?? "").join("\n");
+  // A failed boot is content, not an error, and so is a server that cannot be
+  // reached: the write has already happened, and the model is better told.
+  let text: string;
+  try {
+    if (socketPath) {
+      const result = await askServer(socketPath, "fieldguide/afterWrite", target, HOOK_TIMEOUT_MS["--after-write"]);
+      text = typeof result.text === "string" ? result.text : "";
+    } else {
+      await loadExtension();
+      text = await afterWrite(target);
+    }
+  } catch (err) {
+    text = `[fieldguide] verify unavailable: ${message(err)}`;
+  }
   if (text) process.stdout.write(text + "\n");
   return 0;
 }
@@ -138,12 +267,33 @@ const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 type Id = string | number;
 type Message = { jsonrpc?: string; id?: Id | null; method?: string; params?: Record<string, unknown> };
 
-function send(message: Record<string, unknown>) {
-  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\n");
-}
+/**
+ * One MCP conversation: stdio, or one connection to the socket. Request ids are
+ * the client's, so two sessions may well both use id 1; everything keyed by id
+ * lives here rather than in the process.
+ */
+class Session {
+  readonly inflight = new Map<Id, AbortController>();
+  // A plain field, not a parameter property: node strips types, and does not
+  // compile the ones that would generate code.
+  private readonly write: (line: string) => void;
 
-function fail(id: Id | null, code: number, message: string) {
-  send({ id, error: { code, message } });
+  constructor(write: (line: string) => void) {
+    this.write = write;
+  }
+
+  send(message: Record<string, unknown>) {
+    this.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\n");
+  }
+
+  fail(id: Id | null, code: number, message: string) {
+    this.send({ id, error: { code, message } });
+  }
+
+  /** Nobody is left to read a result, so in-flight calls are abandoned. */
+  abandon() {
+    for (const controller of this.inflight.values()) controller.abort();
+  }
 }
 
 /**
@@ -166,34 +316,79 @@ function listTools() {
   }));
 }
 
-const inflight = new Map<Id, AbortController>();
-
-async function callTool(id: Id, params: Record<string, unknown>) {
+async function callTool(session: Session, id: Id, params: Record<string, unknown>) {
   const tool = tools.get(String(params.name));
   if (!tool) {
     // A protocol error, not a tool error: the model asked for a tool it was
     // never offered, which is a client bug or a disabled verb.
-    fail(id, -32602, `unknown tool: ${String(params.name)}`);
+    session.fail(id, -32602, `unknown tool: ${String(params.name)}`);
     return;
   }
   const controller = new AbortController();
-  inflight.set(id, controller);
+  session.inflight.set(id, controller);
   try {
     const result = await tool.execute(String(id), params.arguments ?? {}, controller.signal);
     if (controller.signal.aborted) return;
-    send({ id, result: { content: result.content } });
+    session.send({ id, result: { content: result.content } });
   } catch (err) {
     if (controller.signal.aborted) return;
     // pi marks a failed tool by throwing; MCP by isError. Either way the model
     // sees the message — agents recover well from clear errors.
-    const text = err instanceof Error ? err.message : String(err);
-    send({ id, result: { content: [{ type: "text", text }], isError: true } });
+    session.send({ id, result: { content: [{ type: "text", text: message(err) }], isError: true } });
   } finally {
-    inflight.delete(id);
+    session.inflight.delete(id);
   }
 }
 
-function dispatch(message: Message) {
+/**
+ * The two write hooks, for a hook running inside the sandbox. Not tools: they
+ * are absent from tools/list, and no model is offered them. An agent with a
+ * shell can still connect to the socket and call them directly, which grants
+ * nothing it does not already have:
+ *
+ *   beforeWrite  the path gate, which only answers, plus a checkpoint, which
+ *                commits the config tree to the shadow repo. Any write the
+ *                agent makes already does both.
+ *   afterWrite   the same checkpoint, plus verify, which is an agent verb in
+ *                its own right.
+ *
+ * Neither reads a file for the caller, runs anything the caller chose, or
+ * reaches Neovim beyond the verbs. A refusal names the path the gate resolved,
+ * which tells the caller where a path outside its sandbox leads: the same the
+ * pi agent learns from the gate, and never a file's contents.
+ *
+ * The path is decided on the real filesystem, and the agent writes to its own
+ * view of it. The two agree everywhere the agent can write — the config tree
+ * is bound at its own path — and differ only under the tmpfs'd /tmp, $HOME and
+ * $XDG_RUNTIME_DIR. A path there resolves, out here, to something the agent
+ * never made: outside the zones, and refused. The one other case is a path
+ * that leads into the config tree out here but not in there (a link in $HOME,
+ * say): allowed, and the agent's write lands in its own tmpfs, where it is
+ * thrown away. Both fail closed.
+ */
+async function writeHook(session: Session, id: Id, which: "before" | "after", params: Record<string, unknown>) {
+  const target = params.path;
+  if (typeof target !== "string" || !path.isAbsolute(target)) {
+    session.fail(id, -32602, "path must be absolute");
+    return;
+  }
+  // In flight like a tool call, so a hook that hangs up — gave up waiting, or
+  // was killed — aborts the checkpoint or verify it asked for.
+  const controller = new AbortController();
+  session.inflight.set(id, controller);
+  const { signal } = controller;
+  try {
+    const result =
+      which === "before" ? await beforeWrite(target, signal) : { text: await afterWrite(target, signal) };
+    if (!signal.aborted) session.send({ id, result });
+  } catch (err) {
+    if (!signal.aborted) session.fail(id, -32603, message(err));
+  } finally {
+    session.inflight.delete(id);
+  }
+}
+
+function dispatch(session: Session, message: Message) {
   const { id, method } = message;
   // `?? {}` and not a destructuring default, which lets null through.
   const params = message.params ?? {};
@@ -202,12 +397,17 @@ function dispatch(message: Message) {
   // A request without an id is a notification, and a notification is never
   // answered. None of these has any use as one, and a tools/call has side
   // effects, so they are dropped rather than run.
-  if (!isRequest && (method === "initialize" || method === "ping" || method?.startsWith("tools/"))) return;
+  if (
+    !isRequest &&
+    (method === "initialize" || method === "ping" || method?.startsWith("tools/") || method?.startsWith("fieldguide/"))
+  ) {
+    return;
+  }
 
   switch (method) {
     case "initialize": {
       const asked = String(params.protocolVersion ?? "");
-      send({
+      session.send({
         id,
         result: {
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
@@ -218,39 +418,46 @@ function dispatch(message: Message) {
       return;
     }
     case "ping":
-      send({ id, result: {} });
+      session.send({ id, result: {} });
       return;
     case "tools/list":
-      send({ id, result: { tools: listTools() } });
+      session.send({ id, result: { tools: listTools() } });
       return;
     case "tools/call":
       // Not awaited: a slow verify must not hold up a ping, or a cancellation
       // of itself.
-      void callTool(id as Id, params);
+      void callTool(session, id as Id, params);
+      return;
+    case "fieldguide/beforeWrite":
+      void writeHook(session, id as Id, "before", params);
+      return;
+    case "fieldguide/afterWrite":
+      void writeHook(session, id as Id, "after", params);
       return;
     case "notifications/cancelled": {
       // The spec asks for no response to a cancelled request. Aborting kills
       // the client process; the editor finishes whatever it had started.
-      const controller = inflight.get(params.requestId as Id);
+      const controller = session.inflight.get(params.requestId as Id);
       controller?.abort();
       return;
     }
     default:
       // Notifications we have no use for (initialized, progress, roots) are
       // ignored; a request we do not know gets told so rather than silence.
-      if (isRequest) fail(id as Id, -32601, `method not found: ${String(method)}`);
+      if (isRequest) session.fail(id as Id, -32601, `method not found: ${String(method)}`);
   }
 }
 
-function serve() {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+/** Read one newline-delimited JSON-RPC stream into a session. */
+function attach(session: Session, input: NodeJS.ReadableStream, onClose: () => void) {
+  const lines = createInterface({ input, crlfDelay: Infinity });
   lines.on("line", (line) => {
     if (!line.trim()) return;
     let message: Message;
     try {
       message = JSON.parse(line);
     } catch {
-      fail(null, -32700, "parse error");
+      session.fail(null, -32700, "parse error");
       return;
     }
     // A string method, checked here once, so nothing downstream has to guard
@@ -262,20 +469,235 @@ function serve() {
       typeof message.method !== "string" ||
       !message.method
     ) {
-      fail((message as Message)?.id ?? null, -32600, "invalid request");
+      session.fail((message as Message)?.id ?? null, -32600, "invalid request");
       return;
     }
-    dispatch(message);
+    dispatch(session, message);
+  });
+  lines.on("close", () => {
+    session.abandon();
+    onClose();
+  });
+}
+
+function serveStdio() {
+  // The harness closing our stdin is the end of the session. The process then
+  // ends on its own once the aborted clients are reaped; the timer is only for
+  // a client that ignores the signal.
+  const session = new Session((line) => process.stdout.write(line));
+  attach(session, process.stdin, () => setTimeout(() => process.exit(0), 2000).unref());
+}
+
+type Identity = { dev: number; ino: number };
+
+/** Which file a path names right now, or null if it names none. */
+function identity(p: string): Identity | null {
+  try {
+    const { dev, ino } = lstatSync(p);
+    return { dev, ino };
+  } catch {
+    return null;
+  }
+}
+
+function same(a: Identity | null, b: Identity | null): boolean {
+  return !!a && !!b && a.dev === b.dev && a.ino === b.ino;
+}
+
+/**
+ * Removes the path only if it still names the file that was looked at. Between
+ * a look and an unlink another server may have bound a socket of its own
+ * there, and unlinking that would leave it running with nobody able to reach
+ * it.
+ */
+function unlinkIfSame(p: string, seen: Identity): boolean {
+  if (!same(identity(p), seen)) return false;
+  try {
+    unlinkSync(p);
+  } catch {}
+  return true;
+}
+
+/**
+ * Takes over a path only when it is a dead socket: a live one is another
+ * server, and anything else is not ours to delete. Looked at again if it
+ * changed while being probed: someone else got there first, and what they
+ * left is decided on its own merits.
+ */
+async function clearStale(socketPath: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let stat;
+    try {
+      stat = lstatSync(socketPath);
+    } catch {
+      return null;
+    }
+    if (!stat.isSocket()) return `${socketPath} exists and is not a socket`;
+    const seen = { dev: stat.dev, ino: stat.ino };
+    const live = await new Promise<boolean>((resolve) => {
+      const probe = createConnection(socketPath);
+      probe.on("connect", () => {
+        probe.destroy();
+        resolve(true);
+      });
+      probe.on("error", () => resolve(false));
+    });
+    if (live) return `${socketPath} is already being served`;
+    if (unlinkIfSame(socketPath, seen)) return null;
+  }
+  return `${socketPath} kept changing while it was being taken over`;
+}
+
+const TAKEOVER_LOCK_STALE_MS = 5_000;
+
+/**
+ * Runs `fn` holding `<socket>.lock`, a directory, because mkdir either makes
+ * it or fails: two servers can never both hold it. A takeover takes
+ * milliseconds, so a lock older than a few seconds was left by a server that
+ * died holding it, and is taken over in turn.
+ */
+async function withTakeoverLock<T>(socketPath: string, fn: () => Promise<T>): Promise<T> {
+  const lock = `${socketPath}.lock`;
+  const deadline = Date.now() + 2 * TAKEOVER_LOCK_STALE_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock, 0o700);
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+    try {
+      if (Date.now() - statSync(lock).mtimeMs > TAKEOVER_LOCK_STALE_MS) rmdirSync(lock);
+    } catch {}
+    if (Date.now() > deadline) throw new Error(`${lock} is held and has not been released`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      rmdirSync(lock);
+    } catch {}
+  }
+}
+
+// sun_path is 104 bytes on macOS and 108 on Linux, NUL included. Past that the
+// kernel answers EINVAL, which names neither the limit nor the path's length.
+const SOCKET_PATH_MAX = 103;
+
+async function serveSocket(socketPath: string) {
+  const length = Buffer.byteLength(socketPath);
+  if (length > SOCKET_PATH_MAX) {
+    process.stderr.write(
+      `fieldguide: ${socketPath} is ${length} bytes; a unix socket path must fit in ${SOCKET_PATH_MAX}. ` +
+        `Put it somewhere shorter, such as $XDG_RUNTIME_DIR.\n`,
+    );
+    process.exit(1);
+  }
+  const refuse = (why: string) => {
+    process.stderr.write(`fieldguide: ${why}\n`);
+    process.exit(1);
+  };
+
+  const server = createServer((conn: Socket) => {
+    conn.setEncoding("utf8");
+    const session = new Session((line) => {
+      if (!conn.destroyed) conn.write(line);
+    });
+    // A connection that errors (a relay killed mid-write) is one session
+    // ending, not the server.
+    conn.on("error", () => conn.destroy());
+    attach(session, conn, () => conn.end());
   });
 
-  // The harness closing our stdin is the end of the session. Nobody is left to
-  // read a result, so in-flight calls are abandoned rather than waited on. The
-  // process then ends on its own once the aborted clients are reaped; the timer
-  // is only for a client that ignores the signal.
-  lines.on("close", () => {
-    for (const controller of inflight.values()) controller.abort();
-    setTimeout(() => process.exit(0), 2000).unref();
+  // Probe, clear and bind as one step, under the lock: another server doing
+  // the same at the same time would otherwise see the same dead socket, and
+  // one of the two would unlink the other's fresh one.
+  let own: Identity | null = null;
+  const refusal = await withTakeoverLock(socketPath, async () => {
+    const stale = await clearStale(socketPath);
+    if (stale) return stale;
+    // Owner-only from the moment it exists, not after a chmod: the socket is a
+    // way to run the verbs, and nobody else on the machine should have it.
+    const previous = process.umask(0o177);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(socketPath, () => resolve());
+      });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") return `${socketPath} is already being served`;
+      throw err;
+    } finally {
+      process.umask(previous);
+    }
+    chmodSync(socketPath, 0o600);
+    // The socket this server bound. Only this one is ever removed on the way out.
+    own = identity(socketPath);
+    return null;
   });
+  if (refusal) refuse(refusal);
+
+  let closing = false;
+  const shutdown = () => {
+    if (closing) return;
+    closing = true;
+    // Not server.close(): libuv unlinks a listening socket's path when it
+    // closes it, whatever file is there by then. Exiting drops the
+    // connections all the same, and the path is removed only if it is ours.
+    if (own) unlinkIfSame(socketPath, own);
+    process.exit(0);
+  };
+  // A server whose socket is gone, or is now another server's, can never be
+  // reached again. It goes rather than run on as an orphan, and leaves the
+  // path to whoever holds it.
+  setInterval(() => {
+    if (closing || same(identity(socketPath), own)) return;
+    process.stderr.write(`fieldguide: ${socketPath} is no longer this server's; exiting\n`);
+    closing = true;
+    process.exit(0);
+  }, 1000).unref();
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("SIGHUP", shutdown);
+  // Launched with a pipe on stdin, the server lives as long as whoever holds
+  // the other end: an editor that dies without a word takes it along. libuv's
+  // "pipe" is a socketpair, not a FIFO, so both count. /dev/null and a
+  // terminal do not, and leave the server to its signals.
+  try {
+    const stdin = fstatSync(0);
+    if (stdin.isFIFO() || stdin.isSocket()) {
+      process.stdin.on("end", shutdown);
+      process.stdin.on("close", shutdown);
+      process.stdin.resume();
+    }
+  } catch {}
+  process.stderr.write(`fieldguide: MCP on ${socketPath}\n`);
+}
+
+/**
+ * The harness's MCP server, from inside the sandbox: bytes both ways and
+ * nothing else. It never loads nvim.ts and needs none of the editor's
+ * variables, because everything it relays is decided out there.
+ */
+function relay(socketPath: string | undefined) {
+  if (!socketPath) {
+    process.stderr.write("fieldguide: --relay needs a socket path, or FIELDGUIDE_MCP_SOCKET\n");
+    process.exit(1);
+  }
+  const conn = createConnection(socketPath);
+  conn.on("error", (err: NodeJS.ErrnoException) => {
+    const why =
+      err.code === "ENOENT" || err.code === "ECONNREFUSED" ? "no fieldguide server is listening there" : err.message;
+    process.stderr.write(`fieldguide: cannot reach ${socketPath}: ${why}\n`);
+    process.exit(1);
+  });
+  conn.on("connect", () => {
+    process.stdin.pipe(conn);
+    conn.pipe(process.stdout);
+  });
+  // Either side ending is the end: the harness closed stdin, or the server went.
+  conn.on("close", () => process.exit(0));
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +707,16 @@ if (mode === "--before-write" || mode === "--after-write") {
   // exitCode rather than exit(): stdout to a pipe is asynchronous on macOS, and
   // exiting outright can drop the very line the hook is waiting for.
   process.exitCode = await runHook(mode, process.argv[3]);
+} else if (mode === "--relay") {
+  relay(process.argv[3] ?? process.env.FIELDGUIDE_MCP_SOCKET);
+} else if (mode === "--listen") {
+  if (!process.argv[3]) {
+    process.stderr.write("fieldguide: --listen needs a socket path\n");
+    process.exit(1);
+  }
+  await loadExtension();
+  await serveSocket(process.argv[3]);
 } else {
-  serve();
+  await loadExtension();
+  serveStdio();
 }
