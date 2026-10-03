@@ -226,7 +226,9 @@ Session.__index = Session
 ---                                    is nil for the first, and the thread to
 ---                                    resume after that; or nil and why
 ---  cwd, session                      the config tree; a thread to resume
----@param opts { launch: fun(thread_id: string?): (string[]?, (table<string, string>|string)?), cwd: string?, session: string? }
+---  model_of(thread_id) -> model?     optional: the model the thread runs on,
+---                                    which the stream itself never names
+---@param opts { launch: fun(thread_id: string?): (string[]?, (table<string, string>|string)?), cwd: string?, session: string?, model_of: (fun(thread_id: string): string?)? }
 ---@return fieldguide.CodexSession
 function M.start(opts)
   local self = setmetatable({
@@ -292,6 +294,8 @@ function Session:_run_prompt(text)
   end
   self._run = inner
   self._interrupted = false
+  -- Asked again each run, until found: Codex logs the model as a turn begins.
+  self._model_known = false
   self._stderr = {}
   self._spoke = false
   inner:on_event(function(event)
@@ -299,6 +303,7 @@ function Session:_run_prompt(text)
       self._spoke = true
       for _, e in ipairs(self._norm:normalize(event.raw)) do
         self:_emit(e)
+        self:_learn_model(e)
       end
     elseif event.kind == "exit" then
       self:_finish(event)
@@ -324,6 +329,24 @@ function Session:_run_prompt(text)
     end
   end)
   inner:input(text)
+end
+
+---Events by which the turn has begun, and Codex has logged its model.
+local TURN_UNDER_WAY = { turn_start = true, message_start = true, tool_start = true, turn_end = true }
+
+---Say the model the thread runs on, once a run, as soon as Codex has logged it.
+---@param e fieldguide.Event
+function Session:_learn_model(e)
+  local model_of = self._opts.model_of
+  local thread = self._norm.thread_id
+  if self._model_known or not model_of or not thread or not TURN_UNDER_WAY[e.kind] then
+    return
+  end
+  local ok, model = pcall(model_of, thread)
+  if ok and type(model) == "string" and model ~= "" then
+    self._model_known = true
+    self:_emit({ kind = "model", model = model, raw = {} })
+  end
 end
 
 ---One prompt's process has gone: the run is over, and the next can start.

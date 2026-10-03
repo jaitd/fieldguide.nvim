@@ -190,6 +190,33 @@ do
   end
 end
 
+io.write("the model a thread runs on\n")
+do
+  local dir = h.state_dir() .. "/home/sessions/2026/10/03"
+  vim.fn.mkdir(dir, "p")
+  local function record(t, payload)
+    return vim.json.encode({ timestamp = "t", type = t, payload = payload })
+  end
+  vim.fn.writefile({
+    record("session_meta", { id = "t-1" }),
+    record("turn_context", { model = "gpt-5.6-luna" }),
+    record("response_item", { type = "message", model = "not-this" }),
+    record("turn_context", { model = "gpt-6-luna" }),
+  }, dir .. "/rollout-2026-10-03T17-11-56-t-1.jsonl")
+  vim.fn.writefile(
+    { record("turn_context", { model = "someone-else" }) },
+    dir .. "/rollout-2026-10-03T17-12-00-t-2.jsonl"
+  )
+  check(
+    "the model of the thread's latest turn",
+    h.session_model("t-1") == "gpt-6-luna",
+    tostring(h.session_model("t-1"))
+  )
+  check("...from that thread's log alone", h.session_model("t-2") == "someone-else")
+  check("a thread with no log yet has none", h.session_model("t-3") == nil)
+  check("an id that is not one is not globbed for", h.session_model("../*") == nil)
+end
+
 io.write("finding the binary\n")
 do
   -- A native stand-in: any real executable will do for finding, not running.

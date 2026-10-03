@@ -203,6 +203,36 @@ function M.codex_home()
   return home, login
 end
 
+---The model a thread ran on, as Codex logged it: every turn opens with a
+---`turn_context` record naming it, in the thread's rollout under our own
+---Codex home. `exec --json` never says, so this is the only place to ask.
+---nil until the first turn has begun, or when the log cannot be read.
+---@param thread_id string
+---@return string?
+function M.session_model(thread_id)
+  if type(thread_id) ~= "string" or not thread_id:match("^[%w%-]+$") then
+    return nil
+  end
+  local logs = vim.fn.globpath(M.state_dir() .. "/home/sessions", "**/rollout-*-" .. thread_id .. ".jsonl", false, true)
+  local path = logs[#logs]
+  local ok, lines = pcall(io.lines, path or "")
+  if not path or not ok then
+    return nil
+  end
+  local model
+  for line in lines do
+    -- Decoded only where it can matter: the log holds every tool output too.
+    if line:find('"type":"turn_context"', 1, true) then
+      local decoded, record = pcall(vim.json.decode, line)
+      local payload = decoded and type(record) == "table" and record.payload or nil
+      if type(payload) == "table" and type(payload.model) == "string" and payload.model ~= "" then
+        model = payload.model
+      end
+    end
+  end
+  return model
+end
+
 ---Codex's own $HOME, empty. Codex walks ~/.agents/skills, and runs commands
 ---in a login shell that reads ~/.zshrc or ~/.bash_profile: here there are
 ---none of the user's, and nothing in the sandbox's log about the refusal.
