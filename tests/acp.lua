@@ -159,6 +159,8 @@ local function run(opts)
     env = opts.env,
     session = opts.session,
     mcp = { command = "node", args = { "mcp.ts" }, env = {} },
+    ready = opts.ready,
+    ready_timeout_ms = opts.ready_timeout_ms,
   })
   assert(session, err)
   session:on_event(function(e)
@@ -421,6 +423,63 @@ do
   end, of_kind(events, "error"))
   check("no session at all is said, with the agent's reason", #said >= 1, vim.inspect(of_kind(events, "error")))
   check("...and the waiting prompt is settled, not stranded", #of_kind(events, "settled") >= 1)
+end
+
+do
+  -- The harness says its gate is not in place: no prompt may reach the agent.
+  local asked, again = 0, {}
+  local events, sent4 = run({
+    prompts = { "ungated?" },
+    ready_timeout_ms = 300,
+    ready = function()
+      asked = asked + 1
+      return "the gate plugin did not load"
+    end,
+    done = function(collected)
+      return #of_kind(collected, "settled") >= 1
+    end,
+    before_stop = function(session)
+      again = { session:prompt("now?") }
+    end,
+  })
+  check("the harness is asked, until it gives up, once its session exists", asked >= 2, tostring(asked))
+  check("a session that is not ready gets no prompt", find_sent(sent4, function(m)
+    return m.method == "session/prompt"
+  end) == nil)
+  local said = vim.tbl_filter(function(e)
+    return e.source == "acp" and e.message:find("gate plugin did not load", 1, true) ~= nil
+  end, of_kind(events, "error"))
+  check("...and the reader is told why", #said >= 1, vim.inspect(of_kind(events, "error")))
+  check("...and the waiting prompt is settled", #of_kind(events, "settled") >= 1)
+  check(
+    "...and a later prompt is refused",
+    again[1] == nil and (again[2] or ""):find("gate plugin", 1, true) ~= nil,
+    vim.inspect(again)
+  )
+end
+
+do
+  local events = run({ prompts = { "gated" }, ready = function() end })
+  check("a ready harness runs its prompt as usual", #of_kind(events, "run_end") >= 1)
+end
+
+do
+  -- opencode v2 sets its plugins up a little after the session exists: a gate
+  -- that is ready a moment later is waited for, not refused.
+  local calls = 0
+  local events, sent5 = run({
+    prompts = { "soon" },
+    ready = function()
+      calls = calls + 1
+      if calls < 4 then
+        return "not yet"
+      end
+    end,
+  })
+  check("a harness ready a moment later is waited for", #of_kind(events, "run_end") >= 1, tostring(calls))
+  check("...and its prompt goes in only then", find_sent(sent5, function(m)
+    return m.method == "session/prompt"
+  end) ~= nil and calls >= 4)
 end
 
 io.write(("\n%d passed, %d failed\n"):format(passed, failed))

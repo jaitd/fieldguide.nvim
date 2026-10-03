@@ -575,7 +575,7 @@ end
 ---@field private _start_error string? why no session could be had, once that is known
 ---@field private _in_flight integer? the id of the prompt now running
 ---@field private _ready boolean
----@field private _opts table
+---@field private _opts table `ready`, if set, is asked once a session exists, until it returns nil to go on or `ready_timeout_ms` (10s) passes
 ---@field private _permission fun(params: table): table, boolean
 local Session = {}
 Session.__index = Session
@@ -717,12 +717,11 @@ function Session:_after(e)
     })
     self:_request(M.session_new, { opts.cwd, opts.mcp })
   elseif e.kind == "response" and (e.command == "session/new" or e.command == "session/load") then
-    self._ready = e.success
     if not e.success then
       self:_fail_start(e.error)
       return
     end
-    self:_drain()
+    self:_await_ready(vim.uv.now() + (opts.ready_timeout_ms or 10000))
   elseif e.kind == "settled" and self._in_flight then
     self._in_flight = nil
     self:_drain()
@@ -754,13 +753,37 @@ end
 ---rather than left queued behind a handshake that is over, and later ones are
 ---refused at once.
 ---@param why string?
-function Session:_fail_start(why)
-  self._start_error = ("the agent did not start a session: %s"):format(tostring(why or "no reason given"))
+---@param verbatim boolean? `why` is the whole message, not the agent's reason
+function Session:_fail_start(why, verbatim)
+  self._start_error = verbatim and tostring(why)
+    or ("the agent did not start a session: %s"):format(tostring(why or "no reason given"))
   local waiting = #self._queue
   self._queue = {}
   self:_emit({ kind = "error", source = "acp", message = self._start_error, raw = {} })
   if waiting > 0 then
     self:_emit({ kind = "settled", raw = {} })
+  end
+end
+
+---The harness's last word before a prompt goes in: whether what it promises
+---(a gate, for opencode's plugin) is actually in place. Asked until it says
+---yes or the deadline passes, because a harness may finish setting up a moment
+---after its session exists; prompts wait in the queue meanwhile. A no at the
+---deadline is a session that never started, and the agent behind it is stopped.
+---@param deadline integer `vim.uv.now()` milliseconds
+function Session:_await_ready(deadline)
+  local check = self._opts.ready
+  local not_ready = check and check() or nil
+  if not not_ready then
+    self._ready = true
+    self:_drain()
+  elseif vim.uv.now() >= deadline or not self:is_running() then
+    self:_fail_start(not_ready, true)
+    self:stop()
+  else
+    vim.defer_fn(function()
+      self:_await_ready(deadline)
+    end, 50)
   end
 end
 
@@ -798,11 +821,12 @@ end
 ---@param _opts table? accepted for the pi session's signature; ACP has no streaming behaviours
 ---@return string?, string?
 function Session:prompt(message, _opts)
-  if not self:is_running() then
-    return nil, "the agent process has exited"
-  end
+  -- The reason a session never started outlives the process it stopped.
   if self._start_error then
     return nil, self._start_error
+  end
+  if not self:is_running() then
+    return nil, "the agent process has exited"
   end
   table.insert(self._queue, message)
   vim.schedule(function()
