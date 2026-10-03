@@ -215,6 +215,50 @@ do
   check("...from that thread's log alone", h.session_model("t-2") == "someone-else")
   check("a thread with no log yet has none", h.session_model("t-3") == nil)
   check("an id that is not one is not globbed for", h.session_model("../*") == nil)
+
+  -- A long-lived thread: a megabyte of tool output after an early turn, then
+  -- the latest turn's record, then more output. Only the end is read.
+  local long = dir .. "/rollout-2026-10-03T18-00-00-t-long.jsonl"
+  local filler = record("response_item", { type = "custom_tool_call_output", output = string.rep("x", 1000) })
+  local lines = { record("turn_context", { model = "early-model" }) }
+  for _ = 1, 1000 do
+    table.insert(lines, filler)
+  end
+  table.insert(lines, record("turn_context", { model = "latest-model" }))
+  for _ = 1, 100 do
+    table.insert(lines, filler)
+  end
+  vim.fn.writefile(lines, long)
+  local size = vim.uv.fs_stat(long).size
+  -- Every byte read counts, by whichever means it is read.
+  local read, fs_read, lines_of = 0, vim.uv.fs_read, io.lines
+  vim.uv.fs_read = function(fd, n, offset)
+    local data = fs_read(fd, n, offset)
+    read = read + #(data or "")
+    return data
+  end
+  io.lines = function(...)
+    local it = lines_of(...)
+    return function()
+      local line = it()
+      read = read + (line and #line + 1 or 0)
+      return line
+    end
+  end
+  local model = h.session_model("t-long")
+  vim.uv.fs_read, io.lines = fs_read, lines_of
+  check("a long log's latest turn is found", model == "latest-model", tostring(model))
+  check("...reading only its end, not the history", read < size / 4, ("%d of %d bytes"):format(read, size))
+
+  -- Records cut across the reads' edges, and the only turn at the very start.
+  local edge = dir .. "/rollout-2026-10-03T18-01-00-t-edge.jsonl"
+  local odd = record("response_item", { type = "message", text = string.rep("y", 70000) })
+  vim.fn.writefile({ record("turn_context", { model = "first-and-only" }), odd, odd, odd }, edge)
+  check(
+    "a turn at the log's start is found across many reads",
+    h.session_model("t-edge") == "first-and-only",
+    tostring(h.session_model("t-edge"))
+  )
 end
 
 io.write("finding the binary\n")
