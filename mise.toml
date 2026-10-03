@@ -27,11 +27,14 @@ depends = [
   "test:extension",
   "test:mcp",
   "test:claude-hook",
+  "test:opencode",
   "test:plugins",
   "test:unit",
   "test:framing",
   "test:rpc",
   "test:claude",
+  "test:acp",
+  "test:harness-opencode",
   "test:sink",
   "test:tools",
   "test:reading",
@@ -62,6 +65,10 @@ run = "node --test tests/mcp.test.ts"
 description = "The Claude Code hook — the gate, Glob patterns, the write hooks"
 run = "node --test tests/claude-hook.test.ts"
 
+[tasks."test:opencode"]
+description = "The opencode plugin — the gate, apply_patch, the write hooks"
+run = "node --test tests/opencode.test.ts"
+
 [tasks."test:plugins"]
 description = "Plugin index — ranking, liveness, edges, and the blurb guards"
 run = "node --test tests/plugins.test.ts tests/blurbs.test.ts tests/changed.test.ts tests/index-fetch.test.ts tests/github.test.ts tests/shape.test.ts"
@@ -81,6 +88,14 @@ run = "nvim -l tests/rpc.lua"
 [tasks."test:claude"]
 description = "Claude stream-json normaliser and launch profile, from a recorded session"
 run = "nvim -l tests/claude.lua"
+
+[tasks."test:acp"]
+description = "ACP adapter against a scripted agent, session/load included"
+run = "nvim -l tests/acp.lua"
+
+[tasks."test:harness-opencode"]
+description = "The opencode launch profile — argv, env, generated config"
+run = "nvim -l tests/harness_opencode.lua"
 
 [tasks."test:sink"]
 description = "Buffer appender — partial lines, autoscroll, large payloads"
