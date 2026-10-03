@@ -602,7 +602,9 @@ test("a write hook given up on", async (t) => {
   // stop too, rather than run on behind a result nobody will read.
   const pidFile = path.join(root, "hook-hung.pid");
   const fake = path.join(root, "hook-hung-nvim");
-  await writeFile(fake, `#!/bin/sh\necho $$ > ${pidFile}\nexec sleep 60\n`);
+  // Appended, not overwritten: a post-write runs two verbs, and every process
+  // the server started has to be gone, not only the last.
+  await writeFile(fake, `#!/bin/sh\necho $$ >> ${pidFile}\nexec sleep 60\n`);
   await chmod(fake, 0o755);
   const sock = path.join(root, "hook-hung.sock");
   const server = await listen(sock, { ...base, FIELDGUIDE_NVIM: fake });
@@ -618,17 +620,22 @@ test("a write hook given up on", async (t) => {
       );
       assert.equal(res.code, which === "--before-write" ? 2 : 0, res.stderr);
       assert.ok(existsSync(pidFile), "the server should have started the checkpoint");
-      const pid = Number((await readFile(pidFile, "utf8")).trim());
-      let alive = true;
-      for (let i = 0; i < 40 && alive; i++) {
-        await sleep(50);
+      const isAlive = (pid: number) => {
         try {
           process.kill(pid, 0);
+          return true;
         } catch {
-          alive = false;
+          return false;
         }
+      };
+      let alive: number[] = [];
+      for (let i = 0; i < 40; i++) {
+        await sleep(50);
+        const pids = (await readFile(pidFile, "utf8")).split("\n").filter(Boolean).map(Number);
+        alive = pids.filter(isAlive);
+        if (alive.length === 0) break;
       }
-      assert.equal(alive, false, "the hung checkpoint must be killed");
+      assert.deepEqual(alive, [], "every verb the server started for the hook must be killed");
     });
   }
 });
