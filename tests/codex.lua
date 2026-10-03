@@ -263,6 +263,82 @@ do
 end
 
 do
+  -- A subscriber that sends a prompt the moment a run settles, while another
+  -- is already queued: never two Codex processes at once.
+  local started, settled, overlap = 0, 0, false
+  local s = codex.start({
+    cwd = root,
+    launch = function(thread)
+      if started > settled then
+        overlap = true
+      end
+      started = started + 1
+      local argv = { FAKE, "exec", "--json" }
+      if thread then
+        vim.list_extend(argv, { "resume", thread })
+      end
+      table.insert(argv, "-")
+      return argv, {}
+    end,
+  })
+  local sent_extra = false
+  s:on_event(function(e)
+    if e.kind == "settled" then
+      settled = settled + 1
+      if not sent_extra then
+        sent_extra = true
+        s:prompt("three")
+      end
+    end
+  end)
+  s:prompt("one")
+  s:prompt("two")
+  vim.wait(20000, function()
+    return settled >= 3
+  end, 20)
+  check(
+    "a prompt sent as a run settles waits its turn behind the queue",
+    not overlap and settled == 3,
+    ("overlap=%s settled=%d"):format(tostring(overlap), settled)
+  )
+  s:stop()
+end
+
+do
+  -- A queued prompt whose launch fails is reported, and the queue moves on.
+  local n = 0
+  local s = codex.start({
+    cwd = root,
+    launch = function()
+      n = n + 1
+      if n == 2 then
+        return { root .. "/no-such-codex", "exec", "--json", "-" }, {}
+      end
+      return { FAKE, "exec", "--json", "-" }, {}
+    end,
+  })
+  local got = {}
+  s:on_event(function(e)
+    table.insert(got, e)
+  end)
+  s:prompt("one")
+  s:prompt("two")
+  s:prompt("three")
+  local ok = vim.wait(20000, function()
+    return #of_kind(got, "settled") >= 3
+  end, 20)
+  check(
+    "a launch that fails does not strand the prompts behind it",
+    ok and n == 3,
+    ("launches=%d settled=%d"):format(n, #of_kind(got, "settled"))
+  )
+  check("...and says why it failed", #vim.tbl_filter(function(e)
+    return e.kind == "error" and e.source == "codex"
+  end, got) == 1)
+  s:stop()
+end
+
+do
   local s, got = session()
   s:prompt("be slow")
   vim.wait(3000, function()

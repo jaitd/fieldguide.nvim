@@ -277,8 +277,10 @@ function Session:_run_prompt(text)
   local argv, env = self._opts.launch(self._norm.thread_id)
   local inner, err = require("fieldguide.rpc").start({ argv = argv, cwd = self._opts.cwd, env = env })
   if not inner then
+    -- Said, then on to whatever is queued behind it: no process will exit to
+    -- move the queue along.
     self:_emit({ kind = "error", source = "codex", message = err, raw = {} })
-    self:_emit({ kind = "settled", raw = {} })
+    self:_settle()
     return
   end
   self._run = inner
@@ -348,12 +350,21 @@ function Session:_finish(exit)
   end
   self._norm._turn = false
   self:_emit({ kind = "run_end", will_retry = false, session_id = self._norm.thread_id, raw = {} })
+  self:_settle()
+end
+
+-- Holds the place of a run between one prompt settling and the next queued
+-- one starting, so a prompt sent from a `settled` subscriber queues behind it
+-- rather than starting alongside.
+local STARTING = { starting = true }
+
+---The run is over: say so, and start the next queued prompt, if any.
+function Session:_settle()
+  local next_prompt = not self._stopped and table.remove(self._queue, 1) or nil
+  self._run = next_prompt and STARTING or nil
   self:_emit({ kind = "settled", session_id = self._norm.thread_id, raw = {} })
-  local next_prompt = table.remove(self._queue, 1)
   if next_prompt then
-    vim.schedule(function()
-      self:_run_prompt(next_prompt)
-    end)
+    self:_run_prompt(next_prompt)
   end
 end
 
@@ -375,7 +386,7 @@ end
 
 ---Stop the running prompt. Its process is stopped; queued prompts wait.
 function Session:interrupt()
-  if self._run then
+  if self._run and self._run ~= STARTING then
     self._interrupted = true
     self._run:stop()
   end
