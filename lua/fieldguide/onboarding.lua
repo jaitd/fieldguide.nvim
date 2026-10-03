@@ -171,17 +171,26 @@ local function ask_model(name, current, done)
     return
   end
   if name == "opencode" then
+    -- No "opencode's own default": it can be a provider with no login (its
+    -- free Zen models, for one), which the list does not show and the first
+    -- prompt would refuse. The model is picked by name, the current one first.
     local models = M.opencode_models()
     if #models > 0 then
-      local default = "opencode's own default"
-      local items = vim.list_extend({ default }, models)
-      select(items, {
-        prompt = "fieldguide: which model should opencode use?",
+      if previous and vim.tbl_contains(models, previous) then
+        models = vim.list_extend(
+          { previous },
+          vim.tbl_filter(function(m)
+            return m ~= previous
+          end, models)
+        )
+      end
+      select(models, {
+        prompt = "fieldguide: which model should opencode use? (it must be one your opencode is logged in for)",
         format_item = function(item)
           return item == previous and (item .. " (current)") or item
         end,
       }, function(item)
-        done(item ~= default and item or nil)
+        done(item)
       end)
       return
     end

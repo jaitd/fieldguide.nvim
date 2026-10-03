@@ -21,6 +21,10 @@ emit_stream() {
   if [ "$REASON" = "length" ]; then
     emit '{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"length","timestamp":2}}'
     emit '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"length","timestamp":2},"toolResults":[]}'
+  elif [ "$REASON" = "auth" ]; then
+    # opencode's words for a model whose provider it has no login for.
+    emit '{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Authentication required: provider authentication required","timestamp":2}}'
+    emit '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Authentication required: provider authentication required","timestamp":2},"toolResults":[]}'
   else
     emit '{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Codex error: that model is not available on this account.","timestamp":2}}'
     emit '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Codex error: that model is not available on this account.","timestamp":2},"toolResults":[]}'

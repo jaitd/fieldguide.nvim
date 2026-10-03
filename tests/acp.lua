@@ -384,6 +384,27 @@ do
   check("other pi commands are refused, not sent", select(2, s:send({ type = "get_state" })) ~= nil)
 end
 
+io.write("a prompt refused for want of a login\n")
+do
+  -- opencode refuses the prompt itself, with a JSON-RPC error: no turn ends
+  -- badly, so the panel hears of it as an error event.
+  local events = run({
+    prompts = { "hi" },
+    env = { FAKE_PROMPT_AUTH = "1" },
+    done = function(c)
+      return #of_kind(c, "error") >= 1
+    end,
+  })
+  local errors = of_kind(events, "error")
+  check(
+    "is an error from the agent, in its words",
+    #errors == 1 and errors[1].source == "agent" and errors[1].message:find("Authentication required", 1, true) ~= nil,
+    vim.inspect(vim.tbl_map(function(e)
+      return { e.source, e.message }
+    end, errors))
+  )
+end
+
 io.write("a resumed session\n")
 do
   local events, sent2 = run({ session = "sess-old" })

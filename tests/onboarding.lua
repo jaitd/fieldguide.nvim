@@ -191,19 +191,28 @@ do
   check("...and its model offered as the default", asked[2].default == "haiku", vim.inspect(asked[2]))
   check("an empty model is the harness's own default", launch.current().model == nil)
 
-  reset({ named("opencode"), named("opencode's own default") })
   local models = onboarding.opencode_models
   onboarding.opencode_models = function()
-    return { "opencode-go/kimi-k3", "opencode-go/glm-5.3" }
+    return { "opencode/fledge-alpha-free", "opencode-go/kimi-k3", "opencode-go/glm-5.3" }
   end
-  onboarding.run()
-  settle()
-  check("opencode's models are offered as a list", asked[2].kind == "select" and #asked[2].items == 3)
-  check("...its own default first, and saved as no model", launch.current().model == nil)
   reset({ named("opencode"), named("opencode-go/kimi-k3") })
   onboarding.run()
   settle()
-  check("...or the one picked", launch.current().model == "opencode-go/kimi-k3")
+  -- Its own default can be a provider with no login, which nothing shows.
+  check(
+    'opencode\'s models are offered by name, with no "own default" to fall into',
+    asked[2].kind == "select"
+      and #asked[2].items == 3
+      and not vim.tbl_contains(asked[2].items, "opencode's own default"),
+    vim.inspect(asked[2] and asked[2].items)
+  )
+  check("...and the one picked is kept", launch.current().model == "opencode-go/kimi-k3")
+  reset({ named("opencode"), named("opencode-go/glm-5.3") })
+  vim.fn.writefile({ vim.json.encode({ name = "opencode", model = "opencode-go/kimi-k3" }) }, launch.choice_path())
+  onboarding.run()
+  settle()
+  check("the current model is offered first", asked[2].items[1] == "opencode-go/kimi-k3", vim.inspect(asked[2].items))
+  check("...and another can be picked", launch.current().model == "opencode-go/glm-5.3")
   onboarding.opencode_models = models
 
   local called = false
