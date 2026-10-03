@@ -334,8 +334,11 @@ function M.start(start_opts)
   start_opts = start_opts or {}
   local choice = M.current()
   -- An explicit argv is a pi command line, as rpc.start takes it.
-  if choice.name == "pi" or start_opts.argv then
+  if start_opts.argv then
     return require("fieldguide.rpc").start(start_opts)
+  end
+  if choice.name == "pi" then
+    return require("fieldguide.rpc").start(vim.tbl_extend("keep", start_opts, { model = choice.model }))
   end
 
   local socket, err = M.mcp_socket()

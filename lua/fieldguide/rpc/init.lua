@@ -26,7 +26,7 @@ local M = {}
 local Session = {}
 Session.__index = Session
 
----@param opts table? { session?: string } an existing session id to carry on
+---@param opts table? { session?: string, model?: string } a session id to carry on; a model over setup()'s
 ---@return string[]
 function M.argv(opts)
   opts = opts or {}
@@ -70,8 +70,10 @@ function M.argv(opts)
   if o.provider then
     vim.list_extend(argv, { "--provider", o.provider })
   end
-  if o.model then
-    vim.list_extend(argv, { "--model", o.model })
+  -- The wizard's answer, when it gave one, is the later word on the model.
+  local model = opts.model or o.model
+  if model then
+    vim.list_extend(argv, { "--model", model })
   end
   return argv
 end

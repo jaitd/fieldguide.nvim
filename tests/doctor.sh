@@ -7,6 +7,9 @@
 
 set -uo pipefail
 MISSING=0
+# This checkout's fieldguide, in an editor without the user's config: the zones
+# come from stdpath(), not from anything the config does.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 row() { # label, found, note
   if [[ -n "$2" ]]; then
@@ -20,7 +23,7 @@ row() { # label, found, note
 printf '\nfieldguide requirements\n'
 
 row nvim  "$(nvim --version 2>/dev/null | head -1)" "not on PATH — 0.12+ required"
-row node  "$(node --version 2>/dev/null)"           "not on PATH — 24+ required by the pi extension"
+row node  "$(node --version 2>/dev/null)"           "not on PATH — 24+ required by the extension and the hooks"
 row git   "$(git --version 2>/dev/null)"            "not on PATH — the shadow repo needs it"
 # The sandbox verify boots in, which is not the same program on every OS.
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -30,10 +33,9 @@ else
   row sandbox "$(bwrap --version 2>/dev/null)" \
     "bwrap not on PATH — verify refuses to boot unsandboxed"
 fi
-row pi    "$(pi --version 2>/dev/null)"             "not on PATH — pnpm add -g @earendil-works/pi-coding-agent"
 
 printf '\nresolved zones\n'
-nvim --headless -c 'lua
+nvim --headless --clean --cmd "set rtp^=$ROOT" -c 'lua
   local ok, cfg = pcall(require, "fieldguide.config")
   if not ok then
     io.write("  ! fieldguide is not on this instance'"'"'s runtimepath\n")
@@ -51,14 +53,36 @@ nvim --headless -c 'lua
   io.write(("  shadow       %s/repos/\n"):format(p.state_dir))
 ' -c 'qa' 2>&1
 
-printf '\nprovider\n'
-# `pi --list-models` exits 0 either way, so the exit code says nothing.
-if pi --list-models 2>&1 | grep -qv "No models available" && \
-   ! pi --list-models 2>&1 | grep -q "No models available"; then
-  printf '  \033[32m✓\033[0m pi has a provider configured\n'
-else
-  printf '  \033[33m!\033[0m no pi provider — run `pi` and use /login, or export OPENROUTER_API_KEY\n'
-  printf '    (steps 1-4 of the build order work with no agent at all)\n'
+printf '\nagents (any one will do; :FieldguideSetup picks)\n'
+# The checks the setup wizard runs, which are the ones each launch runs.
+if ! nvim --headless --clean --cmd "set rtp^=$ROOT" -c 'lua
+  local ok = pcall(require, "fieldguide.onboarding")
+  if not ok then
+    io.write("  ! fieldguide is not on this instance'"'"'s runtimepath\n")
+    vim.cmd("cquit 1")
+  end
+  require("fieldguide.config").setup({})
+  local launch = require("fieldguide.launch")
+  local any = false
+  for _, row in ipairs(require("fieldguide.onboarding").check()) do
+    any = any or row.ready
+    local mark = row.ready and "\27[32m✓\27[0m" or "\27[31m✗\27[0m"
+    io.write(("  %s %-8s %s\n"):format(mark, row.name, row.ready and "ready" or row.why))
+  end
+  local c = launch.current()
+  io.write(("  chosen: %s\n"):format(launch.chosen() and c.name .. (c.model and (" with " .. c.model) or "") or "none yet"))
+  if not any then
+    vim.cmd("cquit 1")
+  end
+' -c 'qa' 2>&1; then
+  MISSING=1
+fi
+
+if command -v pi >/dev/null 2>&1; then
+  # `pi --list-models` exits 0 either way, so the exit code says nothing.
+  if pi --list-models 2>&1 | grep -q "No models available"; then
+    printf '  \033[33m!\033[0m pi has no provider — run `pi` and use /login, or export OPENROUTER_API_KEY\n'
+  fi
 fi
 
 printf '\n'

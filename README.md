@@ -27,8 +27,11 @@ text](https://asciinema.org/a/vupEGx1tyDsjCjJO) — or record your own with
 `mise run demo` ([how](demo/README.md)).
 
 > **Status:** early. Everything described here works and is tested, but expect
-> rough edges. The agent runs on top of [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
-> from your `PATH`.
+> rough edges. The agent is one you already have on your `PATH`:
+> [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent),
+> [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+> [opencode](https://opencode.ai) or [Codex](https://github.com/openai/codex).
+> The first `:Fieldguide` asks which.
 
 ## What it can do
 
@@ -57,11 +60,19 @@ back.
 | read the help files of your installed plugins | read the contents of your open buffers |
 | see which buffers are open, by name, plus their diagnostics | see your terminal, clipboard, or other windows' text |
 | see keymaps, loaded plugins and their versions, LSP clients | reach the network from `verify` |
-| search a downloaded index of the plugin ecosystem, if you fetched one | reach the network at all, except that download |
+| search a downloaded index of the plugin ecosystem, if you fetched one | reach the network with its tools, except that download (Codex aside, below) |
 
 The agent never reads what is in your buffers. `state` reports names, paths,
-and diagnostics messages, not lines. A path gate in the extension enforces the
-readable zones, and the test suite covers known ways around it.
+and diagnostics messages, not lines. A path gate enforces the readable zones
+for every agent, and the test suite covers known ways around it.
+
+Claude Code, opencode and Codex also run inside an OS sandbox that holds only
+your config directory, the docs, and what the agent itself needs to run.
+Codex never runs without it. Claude Code and opencode fall back to the path
+gate alone on a machine with no sandbox, and warn when they do. The
+sandbox leaves the network on, because the agent has to reach its model
+provider. Codex is the one agent with a shell, so its commands can reach the
+network too, but they can read nothing outside those same zones.
 
 ## Requirements
 
@@ -71,15 +82,20 @@ readable zones, and the test suite covers known ways around it.
 | node | 24 or newer |
 | git | for the shadow repo |
 | a sandbox | `bwrap` on Linux, `sandbox-exec` on macOS (ships with the OS) |
-| pi | 0.79 or newer, with a model provider configured |
+| an agent | one of those below, logged in to a model provider |
 
-To install pi and check it can reach a model:
+| Agent | Version | Notes |
+|---|---|---|
+| [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) | 0.79 or newer | the default. `npm install -g @earendil-works/pi-coding-agent`, then `pi --list-models` and `pi auth check --provider <name>` check it can reach a model |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | current | your login, or `ANTHROPIC_API_KEY` |
+| [opencode](https://opencode.ai) | 2.x | 1.x is not supported. Uses your opencode login and providers, and its sessions appear in your opencode history |
+| [Codex](https://github.com/openai/codex) | 0.160 or newer | runs only inside the sandbox. Needs a file login: set `cli_auth_credentials_store = "file"` in `~/.codex/config.toml`, then `codex login` |
 
-```
-npm install -g @earendil-works/pi-coding-agent
-pi --list-models
-pi auth check --provider <name>
-```
+Each agent gets fieldguide's tools and its own file tools, and Codex its
+shell. Its other tools are switched off or refused, and your own settings,
+hooks, skills and instruction files for it are not loaded. The exception is
+opencode, which still reads your global opencode config to find your
+providers; any tool or MCP server declared there is refused.
 
 There is no build step and nothing to `npm install` in this repo.
 
@@ -107,17 +123,29 @@ lazy's `keys` field also lazy-loads the plugin for free.
 
 ## First run
 
-1. Run `:Fieldguide`. The panel opens on the right with the cursor in the prompt.
-2. Ask something about your setup. For example: *what does `<leader>ff` do?*
-   or *why is my LSP not attaching to Lua files?*
+1. Run `:Fieldguide`. The first time, it asks three things:
+   - **which agent** to run. Each one is checked first, and the list says
+     which are ready on this machine and, for the others, what is missing;
+   - **which model**. Leave it empty for the agent's own default. For opencode
+     you pick from the models it lists, which are the providers you are
+     logged in to;
+   - **whether to fetch the plugin index** (see below), if you have none.
+2. The panel opens on the right with the cursor in the prompt. Ask something
+   about your setup. For example: *what does `<leader>ff` do?* or *why is my
+   LSP not attaching to Lua files?*
 3. Press `Enter` to send. `Shift+Enter` inserts a newline. `<C-c>` interrupts.
+
+`:FieldguideSetup` asks again whenever you want a different agent or model.
+The answer is kept in `stdpath("state")/fieldguide/harness.json`, not in your
+config.
 
 The agent answers from your installed plugins' docs and the live session. If it
 edits a file, you will see a `verify` line under the edit saying whether your
 config still boots.
 
-`:Fieldguide` again hides the panel without ending the session. `<C-o>` lists
-past sessions to pick up where you left off.
+`:Fieldguide` again hides the panel without ending the session. With pi, `<C-o>`
+lists past sessions to pick up where you left off. The other agents keep their
+sessions too, but the panel cannot list them yet.
 
 ## Read this before enabling `reload`
 
@@ -167,8 +195,10 @@ Override with `panel_keys = { hide = "...", history = "..." }`.
 |---|---|
 | `:Fieldguide` | toggle the panel; hides, never kills, so the agent keeps its context |
 | `:FieldguideFocus` | jump to the prompt |
-| `:FieldguideHistory` | pick a past session and carry on |
+| `:FieldguideHistory` | pick a past session and carry on (pi only, so far) |
 | `:FieldguideStop` | stop the agent session |
+| `:FieldguideSetup` | choose the agent and its model again |
+| `:FieldguideHarness [name]` | show the agent in use, or switch to `pi`, `claude`, `opencode` or `codex` |
 | `:FieldguideVerify` | sandboxed boot of your config, right now |
 | `:FieldguideReload` | re-require config modules |
 | `:FieldguideUndo [ref]` | restore the config tree from the shadow repo (default `HEAD~1`) |
@@ -178,7 +208,7 @@ Override with `panel_keys = { hide = "...", history = "..." }`.
 | `:FieldguideKeymap <lhs>` | explain a keymap, without an agent |
 | `:FieldguideState [sections]` | dump live state |
 | `:FieldguideIndex` | download or refresh the plugin index |
-| `:FieldguideRpc` | the raw event stream, for protocol work |
+| `:FieldguideRpc` | pi's raw event stream, for protocol work |
 | `:FieldguideTerm` | run pi in an embedded-terminal sidebar instead of the panel |
 
 ## The plugin index (optional)
@@ -233,7 +263,8 @@ Everything below is the default. Pass only what you want to change to `opts`.
 
 ```lua
 {
-  -- nil: whatever pi resolves from its own settings.
+  -- pi only. nil: whatever pi resolves from its own settings. A model chosen
+  -- in :FieldguideSetup takes precedence over `model`.
   provider = nil,
   model = nil,
   cmd = "pi",
@@ -273,7 +304,9 @@ Everything below is the default. Pass only what you want to change to `opts`.
 
 ### Picking a provider and model
 
-`provider` and `model` are passed straight to pi and must agree.
+The agent and model are chosen in `:FieldguideSetup`, not in `opts`. For pi,
+`provider` and `model` can also be set here, and are passed straight to pi.
+They must agree.
 `pi --list-models` shows the valid pairs. A ChatGPT subscription is the
 `openai-codex` provider:
 
@@ -322,7 +355,12 @@ All linked with `default`, so a colourscheme can claim them.
   shares its work tree. Every agent write is a commit there. Your real repo,
   if you have one, never sees it.
 - **The CLI.** Every tool is also `bin/fieldguide <verb>`, which talks to the
-  running editor over its socket. The agent calls the same verbs.
+  running editor over its socket. pi calls the same verbs.
+- **The other agents** run inside an OS sandbox that does not include the
+  editor's socket. They reach the same verbs through a small MCP server the
+  editor starts outside the sandbox, one per editor, on a socket of its own.
+  Their file tools go through the same path gate, and every write through them
+  is checkpointed and verified the same way.
 
 What `verify` does not catch, how the two sandboxes differ, and how the panel
 behaves are in [docs/design-notes.md](docs/design-notes.md).
