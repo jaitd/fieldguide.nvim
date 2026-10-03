@@ -16,7 +16,7 @@ import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { Zones } from "../extension/gate.ts";
-import { decide, globRoot, patchPaths } from "../extension/harness/opencode-gate.ts";
+import { decide, globRoot, patchPaths } from "../extension/harness/opencode/gate.ts";
 import type { ToolEvent } from "../extension/harness/opencode/plugin.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

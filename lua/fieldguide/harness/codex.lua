@@ -20,7 +20,7 @@
 --                                          the login is shared
 --   project_doc_max_bytes = 0              no AGENTS.md from the config tree
 --   web_search = "disabled"                no web
---   hooks (extension/harness/codex-hook.ts) the gate on apply_patch, and
+--   hooks (extension/harness/codex/hook.ts) the gate on apply_patch, and
 --                                          checkpoint and verify around writes,
 --                                          the shell's included, and at the end
 --                                          of each turn
@@ -163,7 +163,7 @@ end
 ---@param o fieldguide.HarnessOpts
 ---@return string
 local function hook_path(o)
-  return o.root .. "/extension/harness/codex-hook.ts"
+  return o.root .. "/extension/harness/codex/hook.ts"
 end
 
 ---Where fieldguide keeps what it generates for Codex.

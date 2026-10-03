@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { after, before, describe, test } from "node:test";
 
-import { decide, DENY_PREFIX, type HookEvent } from "../extension/harness/codex-hook.ts";
+import { decide, DENY_PREFIX, type HookEvent } from "../extension/harness/codex/hook.ts";
 import { fingerprint } from "../extension/harness/fingerprint.ts";
 import type { Zones } from "../extension/gate.ts";
 
@@ -139,8 +139,8 @@ describe("the hook process", () => {
   let log: string;
   before(async () => {
     tree = path.join(root, "plugin");
-    await mkdir(path.join(tree, "extension/harness"), { recursive: true });
-    for (const f of ["extension/gate.ts", "extension/harness/patch.ts", "extension/harness/write-hooks.ts", "extension/harness/codex-hook.ts", "extension/harness/fingerprint.ts"]) {
+    await mkdir(path.join(tree, "extension/harness/codex"), { recursive: true });
+    for (const f of ["extension/gate.ts", "extension/harness/patch.ts", "extension/harness/write-hooks.ts", "extension/harness/codex/hook.ts", "extension/harness/fingerprint.ts"]) {
       await copyFile(path.join(REPO, f), path.join(tree, f));
     }
     log = path.join(root, "server.log");
@@ -159,7 +159,7 @@ if (mode === "--tree-before" && process.env.FAKE_TREE_REFUSE) { console.error("c
     );
   });
 
-  const hook = () => path.join(tree, "extension/harness/codex-hook.ts");
+  const hook = () => path.join(tree, "extension/harness/codex/hook.ts");
   const run = (mode: string, event: HookEvent, env: Record<string, string> = {}) =>
     spawnSync(process.execPath, [hook(), mode], {
       input: JSON.stringify(event),

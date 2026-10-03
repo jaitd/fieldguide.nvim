@@ -1,7 +1,7 @@
 // Claude Code's side of the path gate: a PreToolUse / PostToolUse command hook.
 //
-//   node extension/harness/claude-hook.ts pre    < hook event on stdin
-//   node extension/harness/claude-hook.ts post   < hook event on stdin
+//   node extension/harness/claude/hook.ts pre    < hook event on stdin
+//   node extension/harness/claude/hook.ts post   < hook event on stdin
 //
 // The decision itself is `checkAccess` from gate.ts, unchanged. This file only
 // translates Claude's tool names and argument names into the ones the gate
@@ -17,8 +17,8 @@
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkAccess, isUnder, resolveTarget, type Zones } from "../gate.ts";
-import { afterWrite, beforeWrite, hookEnv as env } from "./write-hooks.ts";
+import { checkAccess, isUnder, resolveTarget, type Zones } from "../../gate.ts";
+import { afterWrite, beforeWrite, hookEnv as env } from "../write-hooks.ts";
 
 // Claude's tool -> the gate's tool. Anything absent is denied outright: the
 // allowlist in --tools is the first line, and this holds if it ever widens.
@@ -231,7 +231,7 @@ async function main(mode: string): Promise<void> {
   } else if (mode === "post") {
     out = await post(ev);
   } else {
-    process.stderr.write(`claude-hook: unknown mode ${mode}\n`);
+    process.stderr.write(`claude hook: unknown mode ${mode}\n`);
     process.exit(2);
   }
   if (out) process.stdout.write(JSON.stringify(out));
