@@ -70,11 +70,17 @@ local function reset(script)
   answers, asked, notes = script, {}, {}
   vim.fn.delete(launch.choice_path())
 end
+-- Each question is asked on the next turn of the main loop, so the wizard
+-- runs on after `run` returns: let it, until the script is used up and what
+-- it set off has finished.
 local function settle()
-  vim.wait(200, function()
+  vim.wait(2000, function()
     return #answers == 0
   end, 10)
+  vim.wait(100)
 end
+-- The wizard's progress line, kept out of the test's own output.
+vim.api.nvim_echo = function() end
 
 io.write("the checks\n")
 do
@@ -159,9 +165,11 @@ do
   end)
   settle()
   check("a harness that is not ready is not taken", got and got.name == "claude", vim.inspect(got))
-  check("...and why is said in full before asking again", #vim.tbl_filter(function(n)
-    return n.msg:find("codex is not ready: Codex has no auth.json", 1, true) ~= nil
-  end, notes) == 1)
+  check(
+    "...and why is said in full in the question asked again",
+    asked[2] and asked[2].prompt:find("codex is not ready: Codex has no auth.json", 1, true) ~= nil,
+    vim.inspect(asked[2] and asked[2].prompt)
+  )
   check("the model is asked for, and trimmed", got and got.model == "haiku", vim.inspect(got))
   check(
     "...and kept",
@@ -177,6 +185,7 @@ do
   reset({ named("claude"), "" })
   vim.fn.writefile({ vim.json.encode({ name = "claude", model = "haiku" }) }, launch.choice_path())
   onboarding.run()
+  settle()
   local first = asked[1]
   check("the current choice is marked", first.format(first.items[2]):find("(current)", 1, true) ~= nil)
   check("...and its model offered as the default", asked[2].default == "haiku", vim.inspect(asked[2]))
@@ -188,10 +197,12 @@ do
     return { "opencode-go/kimi-k3", "opencode-go/glm-5.3" }
   end
   onboarding.run()
+  settle()
   check("opencode's models are offered as a list", asked[2].kind == "select" and #asked[2].items == 3)
   check("...its own default first, and saved as no model", launch.current().model == nil)
   reset({ named("opencode"), named("opencode-go/kimi-k3") })
   onboarding.run()
+  settle()
   check("...or the one picked", launch.current().model == "opencode-go/kimi-k3")
   onboarding.opencode_models = models
 
@@ -200,8 +211,52 @@ do
   onboarding.run(function()
     called = true
   end)
+  settle()
   check("cancelled at the first question, nothing is saved", not launch.chosen())
   check("...and nothing is started", not called)
+end
+
+io.write("a clean screen for each question\n")
+do
+  -- The built-in vim.ui prints each question straight after the last answer,
+  -- with no newline, until Neovim stops for "Press ENTER". Each one must come
+  -- after a redraw, on its own turn of the main loop.
+  local trail = {}
+  local cmd = vim.cmd
+  vim.cmd = function(c)
+    if c == "redraw" then
+      table.insert(trail, "redraw")
+    end
+    return cmd(c)
+  end
+  local select, input = vim.ui.select, vim.ui.input
+  local inside = false
+  vim.ui.select = function(items, opts, on_choice)
+    table.insert(trail, inside and "asked inside an answer" or "ask")
+    inside = true
+    select(items, opts, function(item)
+      on_choice(item)
+    end)
+    inside = false
+  end
+  vim.ui.input = function(opts, on_confirm)
+    table.insert(trail, inside and "asked inside an answer" or "ask")
+    inside = true
+    input(opts, on_confirm)
+    inside = false
+  end
+  reset({ named("claude"), "haiku", starting("Not now") })
+  onboarding.run()
+  settle()
+  vim.cmd, vim.ui.select, vim.ui.input = cmd, select, input
+  local asks, clean = 0, true
+  for i, step in ipairs(trail) do
+    if step ~= "redraw" then
+      asks = asks + 1
+      clean = clean and step == "ask" and trail[i - 1] == "redraw"
+    end
+  end
+  check("every question is asked after a redraw, on a turn of its own", asks == 3 and clean, vim.inspect(trail))
 end
 
 io.write("the first start\n")
@@ -209,6 +264,7 @@ do
   local chat = require("fieldguide.chat")
   reset({})
   chat.start()
+  settle()
   check("with nothing chosen, the first start asks", #asked == 1 and asked[1].prompt:find("which agent", 1, true))
   check("...and cancelled, starts nothing", not chat._state().session)
 
@@ -223,7 +279,16 @@ do
   reset({})
   vim.fn.writefile({ vim.json.encode({ name = "pi" }) }, launch.choice_path())
   chat.start()
-  check("once chosen, a start does not ask again", #asked == 0 and chat._state().session ~= nil)
+  settle()
+  -- The wizard's questions only: the stand-in pi raises a dialog of its own.
+  local wizard = vim.tbl_filter(function(a)
+    return vim.startswith(a.prompt or "", "fieldguide:")
+  end, asked)
+  check(
+    "once chosen, a start does not ask again",
+    #wizard == 0 and chat._state().session ~= nil,
+    vim.inspect({ asked = wizard, session = chat._state().session ~= nil })
+  )
   chat.stop()
 end
 
@@ -231,6 +296,7 @@ io.write("pi's model\n")
 do
   reset({ named("pi"), pair("openai-codex", "gpt-5.5"), starting("Not now") })
   onboarding.run()
+  settle()
   check("pi's models are offered from its own list", asked[2].kind == "select" and #asked[2].items == 3)
   check(
     "...and the provider is kept with the model",
@@ -260,6 +326,7 @@ do
   pi_models = {}
   reset({ named("pi"), starting("Not now") })
   onboarding.run()
+  settle()
   check(
     "a pi that lists no models is not asked for one",
     #asked == 2 and asked[2].prompt:find("plugin index", 1, true) ~= nil and launch.current().model == nil,
@@ -282,6 +349,7 @@ do
   onboarding.run(function()
     started = true
   end)
+  settle()
   check("a download asked for is started", pending ~= nil)
   check("...and the session waits for it", not started)
   if pending then
