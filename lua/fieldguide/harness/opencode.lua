@@ -82,6 +82,14 @@ function M.state_dir()
   return cfg.paths().state_dir .. "/harness/opencode"
 end
 
+---opencode's own $HOME, empty, inside `state_dir()`.
+---@return string
+function M.home()
+  local dir = M.state_dir() .. "/home"
+  vim.fn.mkdir(dir, "p")
+  return dir
+end
+
 ---The config opencode runs with. Pure, so the policy can be read and tested
 ---without starting anything.
 ---@param o fieldguide.HarnessOpts
@@ -210,11 +218,26 @@ function M.env(o)
     -- directory above it, would otherwise be merged into the agent's config
     -- and prompt.
     OPENCODE_DISABLE_PROJECT_CONFIG = "1",
-    -- ~/.claude/CLAUDE.md and ~/.claude/skills are read by default.
+    -- ~/.claude/CLAUDE.md and ~/.claude/skills are read by default. opencode
+    -- 1.x honours these two; v2 no longer reads either, which is why $HOME
+    -- below is opencode's own.
     OPENCODE_DISABLE_CLAUDE_CODE = "1",
     OPENCODE_DISABLE_EXTERNAL_SKILLS = "1",
     OPENCODE_DISABLE_AUTOUPDATE = "1",
   }
+  -- opencode finds ~/.claude (CLAUDE.md, skills) and ~/.agents (skills)
+  -- through $HOME, so it gets an empty one of its own: there is nothing there
+  -- to merge into the agent's prompt, whichever opencode it is. Inside the
+  -- macOS sandbox it is also what keeps it starting at all, because a
+  -- refused ~/.claude is EPERM rather than missing, and v2 fails the session
+  -- on it. Its own directories are named outright so the move takes none of
+  -- them along: the credentials, the user's providers, the ripgrep in its
+  -- cache. A provider whose credentials live elsewhere under $HOME (~/.aws,
+  -- say) is the cost.
+  env.HOME = M.home()
+  env.XDG_CONFIG_HOME = xdg("XDG_CONFIG_HOME", ".config")
+  env.XDG_DATA_HOME = xdg("XDG_DATA_HOME", ".local/share")
+  env.XDG_CACHE_HOME = xdg("XDG_CACHE_HOME", ".cache")
   -- The plugin's write hooks run mcp.ts on this node, which the sandbox binds.
   env.FIELDGUIDE_NODE = node_bin(o)
   if o.mcp_socket then

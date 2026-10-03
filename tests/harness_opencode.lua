@@ -94,7 +94,25 @@ do
       and env.OPENCODE_DISABLE_CLAUDE_CODE == "1"
       and env.OPENCODE_DISABLE_EXTERNAL_SKILLS == "1"
   )
-  check("credentials are not redirected: a refreshed token lands in the real file", env.XDG_DATA_HOME == nil)
+  -- opencode v2 no longer reads OPENCODE_DISABLE_CLAUDE_CODE: it finds
+  -- ~/.claude, ~/.agents and CLAUDE.md through $HOME, so $HOME is its own.
+  check(
+    "opencode's $HOME is its own, so ~/.claude and ~/.agents are not there to find",
+    vim.startswith(env.HOME, h.state_dir() .. "/") and vim.uv.fs_stat(env.HOME) ~= nil,
+    env.HOME
+  )
+  -- Its own directories are named outright, so the private $HOME moves none.
+  local real_home = vim.uv.os_homedir()
+  check(
+    "credentials are not redirected: a refreshed token lands in the real file",
+    env.XDG_DATA_HOME == (vim.env.XDG_DATA_HOME or (real_home .. "/.local/share")),
+    env.XDG_DATA_HOME
+  )
+  check(
+    "nor are the user's providers, or the ripgrep opencode keeps in its cache",
+    env.XDG_CONFIG_HOME == (vim.env.XDG_CONFIG_HOME or (real_home .. "/.config"))
+      and env.XDG_CACHE_HOME == (vim.env.XDG_CACHE_HOME or (real_home .. "/.cache"))
+  )
 end
 
 -- The launch is by opencode's real path, which the sandbox binds; on a machine
