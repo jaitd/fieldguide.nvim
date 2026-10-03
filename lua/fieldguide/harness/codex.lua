@@ -221,27 +221,54 @@ local function last_turn_model(path)
   local pos = stat and stat.size or 0
   -- The start of a line whose end has been read, carried into the next read.
   local partial = ""
+  -- Inside a line longer than a read: a tool's output, never a turn_context
+  -- (those are under a kilobyte). Passed over rather than built up, which
+  -- would copy all of it again at every read.
+  local skipping = false
   local model
   while pos > 0 and not model do
     local n = math.min(TAIL_CHUNK, pos)
     pos = pos - n
-    local buf = (vim.uv.fs_read(fd, n, pos) or "") .. partial
-    -- Short of the file's start, the first line is cut: keep it for the next.
-    local cut = pos > 0 and buf:find("\n", 1, true) or nil
-    if pos > 0 and not cut then
-      partial = buf
+    local chunk = vim.uv.fs_read(fd, n, pos) or ""
+    local buf
+    if skipping then
+      -- The long line starts after this read's last newline, if it has one.
+      -- Found by plain searches: a pattern would backtrack over all of it.
+      local last
+      local at = chunk:find("\n", 1, true)
+      while at do
+        last = at
+        at = chunk:find("\n", at + 1, true)
+      end
+      if last then
+        skipping = false
+        buf = chunk:sub(1, last - 1)
+      end
     else
-      partial = cut and buf:sub(1, cut - 1) or ""
-      local lines = vim.split(buf:sub((cut or 0) + 1), "\n", { plain = true })
-      for i = #lines, 1, -1 do
-        local line = lines[i]
-        -- Decoded only where it can matter: the log holds every tool output too.
-        if line:find('"type":"turn_context"', 1, true) then
-          local decoded, record = pcall(vim.json.decode, line)
-          local payload = decoded and type(record) == "table" and record.payload or nil
-          if type(payload) == "table" and type(payload.model) == "string" and payload.model ~= "" then
-            model = payload.model
-            break
+      buf = chunk .. partial
+    end
+    if buf then
+      -- Short of the file's start, the first line is cut: keep it for the next.
+      local cut = pos > 0 and buf:find("\n", 1, true) or nil
+      if pos > 0 and not cut then
+        if #buf > TAIL_CHUNK then
+          partial, skipping = "", true
+        else
+          partial = buf
+        end
+      else
+        partial = cut and buf:sub(1, cut - 1) or ""
+        local lines = vim.split(buf:sub((cut or 0) + 1), "\n", { plain = true })
+        for i = #lines, 1, -1 do
+          local line = lines[i]
+          -- Decoded only where it can matter: the log holds every tool output too.
+          if line:find('"type":"turn_context"', 1, true) then
+            local decoded, record = pcall(vim.json.decode, line)
+            local payload = decoded and type(record) == "table" and record.payload or nil
+            if type(payload) == "table" and type(payload.model) == "string" and payload.model ~= "" then
+              model = payload.model
+              break
+            end
           end
         end
       end
