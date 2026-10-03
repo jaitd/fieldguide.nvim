@@ -23,8 +23,15 @@ const MCP = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "mcp.t
 
 type Run = { code: number | null; stdout: string; stderr: string };
 
+// How long each hook may take: past mcp.ts's own wait on the server (75s for
+// a pre-write, one verb; 135s for a post-write, two), so its answer arrives
+// first when there is one. A hook that outlives this is killed, and the
+// server abandons the work when its connection drops.
+const HOOK_TIMEOUT_MS = { "--before-write": 80_000, "--after-write": 140_000 };
+
 /** A hook entry point of the MCP server, run from the config tree. */
 function runHook(mode: "--before-write" | "--after-write", target: string, cwd: string): Promise<Run> {
+  const limit = Number(process.env.FIELDGUIDE_PLUGIN_HOOK_TIMEOUT_MS) || HOOK_TIMEOUT_MS[mode];
   return new Promise((resolve) => {
     // node, not this process: opencode runs plugins in its own runtime, and
     // mcp.ts leans on node's module hooks.
@@ -39,8 +46,16 @@ function runHook(mode: "--before-write" | "--after-write", target: string, cwd: 
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (d: string) => (stdout += d));
     child.stderr.on("data", (d: string) => (stderr += d));
-    child.on("error", (err) => resolve({ code: null, stdout, stderr: String(err) }));
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve({ code: null, stdout, stderr: `${mode} did not answer within ${limit / 1000}s` });
+    }, limit);
+    const done = (run: Run) => {
+      clearTimeout(timer);
+      resolve(run);
+    };
+    child.on("error", (err) => done({ code: null, stdout, stderr: String(err) }));
+    child.on("close", (code) => done({ code, stdout, stderr }));
   });
 }
 
@@ -85,7 +100,13 @@ export const FieldguidePlugin = async ({ directory }: { directory: string }) => 
       writes.delete(input.callID!);
       // One report per write, as pi gives: the first path is the one it names.
       const run = await runHook("--after-write", touched[0], directory);
-      const report = run.stdout.trim();
+      // The write has landed either way, so a failure is said, not thrown: a
+      // hook that failed or never started means no checkpoint and no verify,
+      // and silence would read as a clean boot.
+      const report =
+        run.code === 0
+          ? run.stdout.trim()
+          : `[fieldguide] verify unavailable: ${run.stderr.trim() || `exit ${run.code}`}`;
       // Empty is "nothing to attach": a path outside the config, or verify off.
       if (report) output.output = `${output.output ?? ""}\n\n${report}`;
     },

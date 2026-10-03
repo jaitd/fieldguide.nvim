@@ -50,21 +50,27 @@ export function patchPaths(text: unknown): string[] | null {
 }
 
 /**
- * The directory a glob pattern starts from, if the pattern names one. A
- * relative pattern without `..` stays under the search path; an absolute one
- * is a path in its own right; one that climbs is refused outright rather than
- * resolved, since which directories `**` will match cannot be known here.
+ * The directory a glob pattern starts from: the segments before its first
+ * wildcard. An absolute pattern names a path in its own right. A relative one
+ * names a path under the search path, and that path is checked too, because
+ * a symlink in the config tree (`escape/*.env`) leads out without a `..`. One
+ * that climbs is refused outright rather than resolved, since which
+ * directories `**` will match cannot be known here. Past the first wildcard,
+ * a link can only be caught by the OS sandbox around the harness.
  */
 export function globRoot(pattern: string): { root?: string; climbs: boolean } {
   const segments = pattern.split(/[\\/]/);
   if (segments.includes("..")) return { climbs: true };
-  if (!path.isAbsolute(pattern)) return { climbs: false };
+  // The last segment is the file part, not a directory, even with no wildcard.
+  const dirs = segments.slice(0, -1);
   const fixed: string[] = [];
-  for (const segment of segments) {
+  for (const segment of dirs) {
     if (/[*?[\]{}]/.test(segment)) break;
     fixed.push(segment);
   }
-  return { root: fixed.join("/") || "/", climbs: false };
+  if (path.isAbsolute(pattern)) return { root: fixed.join("/") || "/", climbs: false };
+  const root = fixed.filter((s) => s !== "" && s !== ".").join("/");
+  return root ? { root, climbs: false } : { climbs: false };
 }
 
 const deny = (reason: string): Verdict => ({ allow: false, reason });
@@ -112,7 +118,10 @@ export async function decide(tool: string, args: Record<string, unknown>, zones:
     const { root, climbs } = globRoot(pattern);
     if (climbs) return deny(`${tool}: a pattern may not climb out with ..: ${pattern}`);
     if (root) {
-      const r = await one(piTool, root, zones);
+      // A relative prefix is taken against the search path, as the tool will.
+      const base = typeof args.path === "string" && args.path !== "" ? args.path : undefined;
+      const target = path.isAbsolute(root) || !base ? root : path.join(base, root);
+      const r = await one(piTool, target, zones);
       if (!r.allow) return r;
     }
   }

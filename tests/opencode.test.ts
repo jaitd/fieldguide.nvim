@@ -59,6 +59,7 @@ const CASES: Case[] = [
   { name: "grep the doc zone", tool: "grep", args: () => ({ pattern: "Gwrite", path: docs, include: "*.txt" }), allow: true },
   { name: "grep with no path", tool: "grep", args: () => ({ pattern: "keymap" }), allow: true },
   { name: "glob a relative pattern", tool: "glob", args: () => ({ pattern: "**/*.lua" }), allow: true },
+  { name: "glob a relative pattern under a config subdirectory", tool: "glob", args: () => ({ pattern: "lua/**/*.lua" }), allow: true },
   { name: "glob an absolute pattern into the docs", tool: "glob", args: () => ({ pattern: `${docs}/**/*.txt` }), allow: true },
   { name: "list the config", tool: "list", args: () => ({ path: "." }), allow: true },
   { name: "fieldguide's own MCP tool", tool: "fieldguide_nvim_state", args: () => ({}), allow: true },
@@ -83,6 +84,9 @@ const CASES: Case[] = [
   { name: "grep through the symlink out", tool: "grep", args: () => ({ pattern: "TOKEN", path: "escape" }), allow: false },
   { name: "grep with an include that climbs", tool: "grep", args: () => ({ pattern: "TOKEN", include: "../../*.env" }), allow: false },
   { name: "glob a pattern that climbs", tool: "glob", args: () => ({ pattern: "../../../*.env" }), allow: false },
+  // No `..`, but its fixed prefix is a symlink in the config tree that leads out.
+  { name: "glob a relative pattern through the symlink out", tool: "glob", args: () => ({ pattern: "escape/*.env" }), allow: false },
+  { name: "grep with an include through the symlink out", tool: "grep", args: () => ({ pattern: "TOKEN", include: "escape/*.env" }), allow: false },
   { name: "glob an absolute pattern outside", tool: "glob", args: () => ({ pattern: `${root}/dotfiles/*.env` }), allow: false },
   { name: "glob with a path outside", tool: "glob", args: () => ({ pattern: "*", path: "/etc" }), allow: false },
 
@@ -126,8 +130,9 @@ test("patchPaths reads every header kind and nothing else", () => {
   assert.equal(patchPaths("*** Add File: a"), null, "no Begin Patch: not a patch");
 });
 
-test("globRoot finds the fixed prefix of an absolute pattern", () => {
+test("globRoot finds the fixed prefix of a pattern, absolute or relative", () => {
   assert.deepEqual(globRoot("/a/b/**/*.lua"), { root: "/a/b", climbs: false });
+  assert.deepEqual(globRoot("a/b/**/*.lua"), { root: "a/b", climbs: false });
   assert.deepEqual(globRoot("**/*.lua"), { climbs: false });
   assert.deepEqual(globRoot("a/../../b"), { climbs: true });
 });
@@ -176,7 +181,28 @@ test("the plugin gates, checkpoints before a write, and appends the verify repor
   await after({ tool: "write", callID: "6" }, quietOut);
   assert.equal(quietOut.output, "Wrote file.");
 
+  // A post-write hook that fails is said, not mistaken for nothing to report:
+  // the write landed without the checkpoint and verify it was promised.
+  await before({ tool: "write", callID: "8" }, { args: { filePath: "fail-after.lua" } });
+  const failedOut = { output: "Wrote file." };
+  await after({ tool: "write", callID: "8" }, failedOut);
+  assert.match(failedOut.output, /^Wrote file\.\n\n\[fieldguide\] verify unavailable: .*checkpoint store is locked/);
+
+  // A pre-write hook that never answers refuses the write, rather than holding
+  // the tool call forever.
+  process.env.FIELDGUIDE_PLUGIN_HOOK_TIMEOUT_MS = "500";
+  await assert.rejects(before({ tool: "write", callID: "9" }, { args: { filePath: "hang.lua" } }), /did not answer/);
+  delete process.env.FIELDGUIDE_PLUGIN_HOOK_TIMEOUT_MS;
+
   // A hook that cannot run at all refuses the write: no checkpoint, no write.
   process.env.FIELDGUIDE_NODE = path.join(root, "no-such-node");
   await assert.rejects(before({ tool: "write", callID: "7" }, { args: { filePath: "a.lua" } }));
+
+  // ...and after a write, it is said rather than read as nothing to report.
+  process.env.FIELDGUIDE_NODE = path.join(HERE, "fixtures/fake-write-hook.sh");
+  await before({ tool: "write", callID: "10" }, { args: { filePath: "b.lua" } });
+  process.env.FIELDGUIDE_NODE = path.join(root, "no-such-node");
+  const missingOut = { output: "Wrote file." };
+  await after({ tool: "write", callID: "10" }, missingOut);
+  assert.match(missingOut.output, /\[fieldguide\] verify unavailable/);
 });
