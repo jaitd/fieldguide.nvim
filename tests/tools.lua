@@ -215,6 +215,16 @@ do
     vim.inspect(e.target)
   )
 
+  -- Line numbers are padded to one width, so an edit that crosses from 9 to
+  -- 10 has `+ 9` beside `+10`. Both are changes.
+  local padded = tools.render({
+    kind = "tool_end",
+    tool = "edit",
+    args = { path = "init.lua", edits = { {} } },
+    details = { diff = "  8 a\n- 9 b\n+ 9 c\n+10 d\n 11 e" },
+  }, CAP)
+  check("padded line numbers are counted too", padded.summary == "edit init.lua — +2 −1", padded.summary)
+
   -- An edit whose result carried no diff still renders.
   local bare = tools.render({ kind = "tool_end", tool = "edit", args = { path = "init.lua", edits = { {}, {} } } }, CAP)
   check("an edit with no diff falls back to a count", bare.summary == "edit init.lua — 2 edit(s)", bare.summary)

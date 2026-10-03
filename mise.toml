@@ -26,10 +26,12 @@ depends = [
   "test:sandbox",
   "test:extension",
   "test:mcp",
+  "test:claude-hook",
   "test:plugins",
   "test:unit",
   "test:framing",
   "test:rpc",
+  "test:claude",
   "test:sink",
   "test:tools",
   "test:reading",
@@ -56,6 +58,9 @@ run = "node --test tests/extension.test.ts"
 [tasks."test:mcp"]
 description = "The verbs over MCP, for harnesses that are not pi"
 run = "node --test tests/mcp.test.ts"
+[tasks."test:claude-hook"]
+description = "The Claude Code hook — the gate, Glob patterns, the write hooks"
+run = "node --test tests/claude-hook.test.ts"
 
 [tasks."test:plugins"]
 description = "Plugin index — ranking, liveness, edges, and the blurb guards"
@@ -72,6 +77,10 @@ run = "nvim -l tests/framing.lua"
 [tasks."test:rpc"]
 description = "Protocol adapter against a scripted agent: loss, order, awkward cases"
 run = "nvim -l tests/rpc.lua"
+
+[tasks."test:claude"]
+description = "Claude stream-json normaliser and launch profile, from a recorded session"
+run = "nvim -l tests/claude.lua"
 
 [tasks."test:sink"]
 description = "Buffer appender — partial lines, autoscroll, large payloads"
