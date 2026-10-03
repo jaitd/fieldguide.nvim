@@ -25,6 +25,46 @@ local MODEL_HINTS = {
   codex = "gpt-5.6-luna",
 }
 
+-- Each question on a clean screen. With the built-in vim.ui, a question is
+-- printed on the command line straight after the answer to the one before,
+-- with no newline between them, and the lists pile up until Neovim stops for
+-- "Press ENTER". So a question is asked on the next turn of the main loop,
+-- once the last one's prompt is done with, and the message area is cleared
+-- first. A picker plugin that takes over vim.ui loses nothing by it.
+
+---@param fn fun()
+local function fresh(fn)
+  vim.schedule(function()
+    vim.cmd("redraw")
+    fn()
+  end)
+end
+
+---@param items any[]
+---@param opts table
+---@param on_choice fun(item: any?)
+local function select(items, opts, on_choice)
+  fresh(function()
+    vim.ui.select(items, opts, on_choice)
+  end)
+end
+
+---@param opts table
+---@param on_confirm fun(text: string?)
+local function input(opts, on_confirm)
+  fresh(function()
+    vim.ui.input(opts, on_confirm)
+  end)
+end
+
+---A line that is progress, not news: shown now, kept out of :messages, and
+---gone at the next question.
+---@param text string
+local function say(text)
+  vim.api.nvim_echo({ { text } }, false, {})
+  vim.cmd("redraw")
+end
+
 ---@class fieldguide.HarnessCheck
 ---@field name string
 ---@field ready boolean
@@ -102,7 +142,7 @@ local function ask_pi_model(current, done)
   end
   local default = { label = "pi's own default" }
   local items = vim.list_extend({ default }, models)
-  vim.ui.select(items, {
+  select(items, {
     prompt = "fieldguide: which model should pi use?",
     format_item = function(item)
       if item == default then
@@ -135,7 +175,7 @@ local function ask_model(name, current, done)
     if #models > 0 then
       local default = "opencode's own default"
       local items = vim.list_extend({ default }, models)
-      vim.ui.select(items, {
+      select(items, {
         prompt = "fieldguide: which model should opencode use?",
         format_item = function(item)
           return item == previous and (item .. " (current)") or item
@@ -146,7 +186,7 @@ local function ask_model(name, current, done)
       return
     end
   end
-  vim.ui.input({
+  input({
     prompt = ("fieldguide: model for %s (%s; empty for its default): "):format(name, MODEL_HINTS[name] or "its name"),
     default = previous or "",
   }, function(text)
@@ -165,11 +205,14 @@ local function offer_index(done)
     return
   end
   local fetch = "Download it now (a few megabytes, from GitHub)"
-  vim.ui.select({ fetch, "Not now (:FieldguideIndex fetches it later)" }, {
+  select({ fetch, "Not now (:FieldguideIndex fetches it later)" }, {
     prompt = "fieldguide: fetch the plugin index, so the agent can answer about plugins you have not installed?",
   }, function(item)
     if item == fetch then
-      require("fieldguide.index").fetch({ on_done = done })
+      -- Its "fetching" line on a clean screen, not under the list.
+      fresh(function()
+        require("fieldguide.index").fetch({ on_done = done })
+      end)
       return
     end
     done()
@@ -179,19 +222,22 @@ end
 ---@param rows fieldguide.HarnessCheck[]
 ---@param current fieldguide.HarnessChoice
 ---@param done fun(row: fieldguide.HarnessCheck?)
-local function pick(rows, current, done)
-  vim.ui.select(rows, {
-    prompt = "fieldguide: which agent should the panel run?",
+---@param refused fieldguide.HarnessCheck? the one just picked that is not ready
+local function pick(rows, current, done, refused)
+  local prompt = "fieldguide: which agent should the panel run?"
+  if refused then
+    -- In the question asked again, in full: the list shows only its first
+    -- line, and a message said before it would be cleared with the screen.
+    prompt = ("fieldguide: %s is not ready: %s\nWhich agent should the panel run?"):format(refused.name, refused.why)
+  end
+  select(rows, {
+    prompt = prompt,
     format_item = function(row)
       return M.label(row, current.name)
     end,
   }, function(row)
     if row and not row.ready then
-      -- Said in full, then asked again: the list shows only its first line.
-      vim.notify(("fieldguide: %s is not ready: %s"):format(row.name, row.why), vim.log.levels.WARN)
-      vim.schedule(function()
-        pick(rows, current, done)
-      end)
+      pick(rows, current, done, row)
       return
     end
     done(row)
@@ -203,10 +249,12 @@ end
 ---@param done fun(choice: fieldguide.HarnessChoice)?
 function M.run(done)
   local current = launch.current()
-  vim.notify("fieldguide: checking which agents are ready…", vim.log.levels.INFO)
+  -- Shown before the checks, which take a moment and block while they run.
+  say("fieldguide: checking which agents are ready…")
   local rows = M.check()
   pick(rows, current, function(row)
     if not row then
+      vim.cmd("redraw")
       vim.notify("fieldguide: setup cancelled; nothing changed", vim.log.levels.INFO)
       return
     end
@@ -218,6 +266,7 @@ function M.run(done)
         return
       end
       offer_index(function()
+        vim.cmd("redraw")
         local running = require("fieldguide.chat")._state().session
         vim.notify(
           ("fieldguide: the panel runs %s%s%s"):format(
