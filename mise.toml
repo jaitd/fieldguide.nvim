@@ -38,6 +38,7 @@ depends = [
   "test:harness-codex",
   "test:acp",
   "test:harness-opencode",
+  "test:launch",
   "test:sink",
   "test:tools",
   "test:reading",
@@ -93,7 +94,7 @@ description = "Protocol adapter against a scripted agent: loss, order, awkward c
 run = "nvim -l tests/rpc.lua"
 
 [tasks."test:claude"]
-description = "Claude stream-json normaliser and launch profile, from a recorded session"
+description = "Claude stream-json normaliser, session and launch profile, from a recorded session and a stand-in"
 run = "nvim -l tests/claude.lua"
 
 [tasks."test:codex"]
@@ -103,6 +104,10 @@ run = "nvim -l tests/codex.lua"
 [tasks."test:harness-codex"]
 description = "The Codex launch profile — argv, env, the binary behind the launcher, preflight"
 run = "nvim -l tests/harness_codex.lua"
+
+[tasks."test:launch"]
+description = "The launcher: the chosen harness, the MCP server outside the sandbox, a launch through both"
+run = "nvim -l tests/launch.lua"
 
 [tasks."test:acp"]
 description = "ACP adapter against a scripted agent, session/load included"

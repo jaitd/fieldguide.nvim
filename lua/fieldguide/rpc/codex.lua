@@ -224,9 +224,9 @@ Session.__index = Session
 ---
 ---  launch(thread_id?) -> argv, env   the command for one prompt; thread_id
 ---                                    is nil for the first, and the thread to
----                                    resume after that
+---                                    resume after that; or nil and why
 ---  cwd, session                      the config tree; a thread to resume
----@param opts { launch: fun(thread_id: string?): (string[], table<string, string>?), cwd: string?, session: string? }
+---@param opts { launch: fun(thread_id: string?): (string[]?, (table<string, string>|string)?), cwd: string?, session: string? }
 ---@return fieldguide.CodexSession
 function M.start(opts)
   local self = setmetatable({
@@ -274,8 +274,15 @@ end
 
 ---@param text string
 function Session:_run_prompt(text)
+  -- `launch` answers nil and why when it cannot say how to run Codex, and
+  -- that is never a cue to run something else: rpc.start with no argv is pi.
   local argv, env = self._opts.launch(self._norm.thread_id)
-  local inner, err = require("fieldguide.rpc").start({ argv = argv, cwd = self._opts.cwd, env = env })
+  local inner, err
+  if argv then
+    inner, err = require("fieldguide.rpc").start({ argv = argv, cwd = self._opts.cwd, env = env })
+  else
+    err = tostring(env or "Codex could not be launched")
+  end
   if not inner then
     -- Said, then on to whatever is queued behind it: no process will exit to
     -- move the queue along.

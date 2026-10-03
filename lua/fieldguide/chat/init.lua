@@ -10,7 +10,6 @@
 
 local cfg = require("fieldguide.config")
 local events = require("fieldguide.rpc.events")
-local rpc = require("fieldguide.rpc")
 local history = require("fieldguide.chat.history")
 local reading = require("fieldguide.chat.reading")
 local sink = require("fieldguide.chat.sink")
@@ -1266,6 +1265,13 @@ end
 ---that produced this transcript, so the next thing you ask lands in the
 ---conversation you are looking at rather than beside it.
 function M.history()
+  -- The files listed are pi's. Resuming one with another harness would hand
+  -- it an id it has never seen.
+  local harness = require("fieldguide.launch").current().name
+  if harness ~= "pi" then
+    vim.notify(("fieldguide: past sessions are kept for pi only so far, and this is %s"):format(harness))
+    return
+  end
   local entries = history.list()
   if #entries == 0 then
     vim.notify("fieldguide: no past sessions in " .. history.dir(), vim.log.levels.INFO)
@@ -1314,7 +1320,7 @@ function M.start(start_opts)
 
   M.open()
 
-  local session, err = rpc.start(start_opts or {})
+  local session, err = require("fieldguide.launch").start(start_opts or {})
   if not session then
     vim.notify("fieldguide: " .. tostring(err), vim.log.levels.ERROR)
     return
