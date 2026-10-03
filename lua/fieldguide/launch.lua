@@ -34,6 +34,7 @@ end
 ---@class fieldguide.HarnessChoice
 ---@field name string one of M.HARNESSES
 ---@field model string? the model to ask that harness for; nil is its own default
+---@field provider string? pi only: the provider that model belongs to
 
 ---The harness chosen, or pi when none has been, or the file names one this
 ---version does not know.
@@ -48,8 +49,10 @@ function M.current()
     decoded = ok and value or nil
   end
   if type(decoded) == "table" and vim.tbl_contains(M.HARNESSES, decoded.name) then
-    local model = decoded.model
-    return { name = decoded.name, model = type(model) == "string" and model ~= "" and model or nil }
+    local function str(v)
+      return type(v) == "string" and v ~= "" and v or nil
+    end
+    return { name = decoded.name, model = str(decoded.model), provider = str(decoded.provider) }
   end
   return { name = "pi" }
 end
@@ -82,7 +85,10 @@ function M.choose(choice)
   -- Through a rename, so an editor reading it meanwhile sees the old choice or
   -- the new one, never half of either.
   local tmp = ("%s.tmp%d"):format(path, vim.uv.os_getpid())
-  if vim.fn.writefile({ vim.json.encode({ name = choice.name, model = choice.model }) }, tmp) ~= 0 then
+  if
+    vim.fn.writefile({ vim.json.encode({ name = choice.name, model = choice.model, provider = choice.provider }) }, tmp)
+    ~= 0
+  then
     return false, "could not write " .. tmp
   end
   local ok, err = vim.uv.fs_rename(tmp, path)
@@ -338,7 +344,9 @@ function M.start(start_opts)
     return require("fieldguide.rpc").start(start_opts)
   end
   if choice.name == "pi" then
-    return require("fieldguide.rpc").start(vim.tbl_extend("keep", start_opts, { model = choice.model }))
+    return require("fieldguide.rpc").start(
+      vim.tbl_extend("keep", start_opts, { model = choice.model, provider = choice.provider })
+    )
   end
 
   local socket, err = M.mcp_socket()

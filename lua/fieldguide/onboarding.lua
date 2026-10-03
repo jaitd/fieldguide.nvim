@@ -7,7 +7,6 @@
 -- anything is picked. The questions are vim.ui.select and vim.ui.input, which
 -- whatever picker the user has installed takes over.
 
-local cfg = require("fieldguide.config")
 local launch = require("fieldguide.launch")
 
 local M = {}
@@ -20,9 +19,8 @@ M.DESCRIPTIONS = {
   codex = "Codex, sandboxed",
 }
 
----Examples for a model typed by hand. opencode lists its own instead.
+---Examples for a model typed by hand. pi and opencode list their own instead.
 local MODEL_HINTS = {
-  pi = "provider/model",
   claude = "sonnet, opus, haiku",
   codex = "gpt-5.6-luna",
 }
@@ -32,27 +30,20 @@ local MODEL_HINTS = {
 ---@field ready boolean
 ---@field why string? what stands in the way, when not ready
 
----Each harness checked by its own preflight. Nothing is started: a placeholder
----stands in for the MCP server's socket, which only Codex asks after, and only
----for being set.
+---Each harness checked by its own preflight, pi's version included. Nothing
+---is started: a placeholder stands in for the MCP server's socket, which only
+---Codex asks after, and only for being set.
 ---@return fieldguide.HarnessCheck[]
 function M.check()
   local rows = {}
   for _, name in ipairs(launch.HARNESSES) do
+    local h = require("fieldguide.harness." .. name)
+    local ok, refused = pcall(h.preflight, launch.opts({ name = name }, "(not started)"))
     local why
-    if name == "pi" then
-      local cmd = cfg.options.cmd or "pi"
-      if vim.fn.executable(cmd) == 0 then
-        why = ("%q is not on PATH"):format(cmd)
-      end
+    if ok then
+      why = refused
     else
-      local h = require("fieldguide.harness." .. name)
-      local ok, refused = pcall(h.preflight, launch.opts({ name = name }, "(not started)"))
-      if ok then
-        why = refused
-      else
-        why = "the check itself failed: " .. tostring(refused)
-      end
+      why = "the check itself failed: " .. tostring(refused)
     end
     table.insert(rows, { name = name, ready = why == nil, why = why })
   end
@@ -98,11 +89,47 @@ function M.opencode_models()
   return models
 end
 
+---@param current fieldguide.HarnessChoice
+---@param done fun(model: string?, provider: string?)
+local function ask_pi_model(current, done)
+  -- A pair, never a model alone: pi needs the provider to agree with it, and
+  -- a model typed by hand would run under whatever provider setup() names.
+  local models = require("fieldguide.harness.pi").models()
+  if #models == 0 then
+    -- No provider pi can use yet; its own default is all there is to pick.
+    done(nil, nil)
+    return
+  end
+  local default = { label = "pi's own default" }
+  local items = vim.list_extend({ default }, models)
+  vim.ui.select(items, {
+    prompt = "fieldguide: which model should pi use?",
+    format_item = function(item)
+      if item == default then
+        return item.label
+      end
+      local text = ("%s  %s"):format(item.provider, item.model)
+      local chosen = current.name == "pi" and current.model == item.model and current.provider == item.provider
+      return chosen and (text .. " (current)") or text
+    end,
+  }, function(item)
+    if not item or item == default then
+      done(nil, nil)
+    else
+      done(item.model, item.provider)
+    end
+  end)
+end
+
 ---@param name string
 ---@param current fieldguide.HarnessChoice
----@param done fun(model: string?)
+---@param done fun(model: string?, provider: string?)
 local function ask_model(name, current, done)
   local previous = current.name == name and current.model or nil
+  if name == "pi" then
+    ask_pi_model(current, done)
+    return
+  end
   if name == "opencode" then
     local models = M.opencode_models()
     if #models > 0 then
@@ -128,6 +155,9 @@ local function ask_model(name, current, done)
   end)
 end
 
+---With a download asked for, `done` waits for it: a session started first
+---would begin without the index it was just promised, and keep that for its
+---whole life.
 ---@param done fun()
 local function offer_index(done)
   if require("fieldguide.env").plugin_index() ~= "" then
@@ -139,7 +169,8 @@ local function offer_index(done)
     prompt = "fieldguide: fetch the plugin index, so the agent can answer about plugins you have not installed?",
   }, function(item)
     if item == fetch then
-      require("fieldguide.index").fetch({})
+      require("fieldguide.index").fetch({ on_done = done })
+      return
     end
     done()
   end)
@@ -179,8 +210,8 @@ function M.run(done)
       vim.notify("fieldguide: setup cancelled; nothing changed", vim.log.levels.INFO)
       return
     end
-    ask_model(row.name, current, function(model)
-      local choice = { name = row.name, model = model }
+    ask_model(row.name, current, function(model, provider)
+      local choice = { name = row.name, model = model, provider = provider }
       local ok, err = launch.choose(choice)
       if not ok then
         vim.notify("fieldguide: could not save the choice: " .. tostring(err), vim.log.levels.ERROR)

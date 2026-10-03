@@ -10,8 +10,6 @@ local env = require("fieldguide.env")
 
 local M = {}
 
-local MIN_PI = { 0, 79, 0 }
-
 ---@type table<string, integer> job handle and window/buffer, per tab-agnostic session
 local session = { job = nil, buf = nil, win = nil }
 
@@ -19,34 +17,8 @@ local plugin_root = env.plugin_root
 
 ---@return boolean, string?
 local function check_harness()
-  local cmd = cfg.options.cmd
-  if vim.fn.executable(cmd) == 0 then
-    return false, ("%q is not on PATH. Install pi with:\n  npm install -g @earendil-works/pi-coding-agent"):format(cmd)
-  end
-  local res = vim.system({ cmd, "--version" }, { text = true }):wait(5000)
-  -- First line only: some tools print a banner, and the whole thing ends up in
-  -- the failure message otherwise.
-  local version = vim.trim(vim.split(res.stdout or "", "\n")[1] or "")
-  local major, minor, patch = version:match("(%d+)%.(%d+)%.(%d+)")
-  if not major then
-    return true -- unparseable, but present; do not block on a cosmetic check
-  end
-  local have = { tonumber(major), tonumber(minor), tonumber(patch) }
-  for i = 1, 3 do
-    if have[i] > MIN_PI[i] then
-      return true
-    end
-    if have[i] < MIN_PI[i] then
-      return false,
-        ("pi %s is older than the minimum %d.%d.%d. Update with:\n  pi update self"):format(
-          version,
-          MIN_PI[1],
-          MIN_PI[2],
-          MIN_PI[3]
-        )
-    end
-  end
-  return true
+  local why = require("fieldguide.harness.pi").preflight()
+  return why == nil, why
 end
 
 ---@return string[]

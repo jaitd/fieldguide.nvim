@@ -37,16 +37,23 @@ local function describe(outcome)
   return "plugin index: " .. (outcome.reason or "fetch failed"), vim.log.levels.WARN
 end
 
----Fetch or refresh the index.
----@param opts? { quiet?: boolean, max_age_days?: integer }
+---Fetch or refresh the index. `on_done` is called once it is over, however it
+---went, or at once when no fetch was started.
+---@param opts? { quiet?: boolean, max_age_days?: integer, on_done?: fun() }
 function M.fetch(opts)
   opts = opts or {}
+  local function finished()
+    if opts.on_done then
+      opts.on_done()
+    end
+  end
   -- Two concurrent fetches would race on the same staging file. The second one
   -- is never the interesting one.
   if running then
     if not opts.quiet then
       vim.notify("fieldguide: an index fetch is already running", vim.log.levels.INFO)
     end
+    finished()
     return
   end
 
@@ -74,22 +81,24 @@ function M.fetch(opts)
           local why = (res.stderr or ""):gsub("%s+$", "")
           vim.notify("fieldguide: index fetch failed — " .. (why ~= "" and why or "no output"), vim.log.levels.WARN)
         end
+        finished()
         return
       end
       local msg, level = describe(outcome)
       -- A background refresh says nothing when there was nothing to do. It does
       -- speak up when it installed something, because which index a session is
       -- about to use is worth knowing.
-      if opts.quiet and outcome.status ~= "installed" then
-        return
+      if not (opts.quiet and outcome.status ~= "installed") then
+        vim.notify("fieldguide: " .. msg, level)
       end
-      vim.notify("fieldguide: " .. msg, level)
+      finished()
     end)
   end)
   if not started then
     if not opts.quiet then
       vim.notify("fieldguide: cannot fetch the index — " .. tostring(err), vim.log.levels.WARN)
     end
+    finished()
     return
   end
   running = true

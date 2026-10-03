@@ -101,6 +101,17 @@ do
   cfg.options.cmd = scratch .. "/no-such-pi"
   local pi = onboarding.check()[1]
   check("pi without its command is not ready, and says so", not pi.ready and pi.why:find("not on PATH", 1, true))
+  -- The version the terminal sidebar has always required.
+  local old_pi = scratch .. "/old-pi"
+  vim.fn.writefile({ "#!/bin/sh", "echo 0.70.0" }, old_pi)
+  vim.uv.fs_chmod(old_pi, tonumber("755", 8))
+  cfg.options.cmd = old_pi
+  pi = onboarding.check()[1]
+  check(
+    "a pi older than the minimum is not ready",
+    not pi.ready and (pi.why or ""):find("older than the minimum 0.79.0", 1, true) ~= nil,
+    vim.inspect(pi)
+  )
   cfg.options.cmd = FAKE
   check(
     "a label says what is in the way, on one line",
@@ -118,6 +129,25 @@ onboarding.check = function()
     { name = "opencode", ready = true },
     { name = "codex", ready = false, why = "Codex has no auth.json" },
   }
+end
+
+-- pi's models, as it would list them.
+local pi_models = {
+  { provider = "openrouter", model = "~anthropic/claude-haiku-latest" },
+  { provider = "openai-codex", model = "gpt-5.5" },
+}
+local pi_profile = require("fieldguide.harness.pi")
+pi_profile.models = function()
+  return pi_models
+end
+local function pair(provider, model)
+  return function(items)
+    for _, item in ipairs(items) do
+      if type(item) == "table" and item.provider == provider and item.model == model then
+        return item
+      end
+    end
+  end
 end
 
 io.write("the questions\n")
@@ -182,7 +212,7 @@ do
   check("with nothing chosen, the first start asks", #asked == 1 and asked[1].prompt:find("which agent", 1, true))
   check("...and cancelled, starts nothing", not chat._state().session)
 
-  reset({ named("pi"), "openai/gpt-5" })
+  reset({ named("pi"), pair("openai-codex", "gpt-5.5") })
   chat.start()
   settle()
   local s = chat._state().session
@@ -199,14 +229,66 @@ end
 
 io.write("pi's model\n")
 do
-  local argv = require("fieldguide.rpc").argv({ model = "openai/gpt-5" })
-  local i = vim.fn.index(argv, "--model")
-  check("the wizard's model is passed to pi", i >= 0 and argv[i + 2] == "openai/gpt-5", vim.inspect(argv))
-  cfg.options.model = "from/setup"
-  argv = require("fieldguide.rpc").argv({})
-  i = vim.fn.index(argv, "--model")
-  check("...and setup()'s when the wizard gave none", argv[i + 2] == "from/setup")
-  cfg.options.model = nil
+  reset({ named("pi"), pair("openai-codex", "gpt-5.5"), starting("Not now") })
+  onboarding.run()
+  check("pi's models are offered from its own list", asked[2].kind == "select" and #asked[2].items == 3)
+  check(
+    "...and the provider is kept with the model",
+    vim.deep_equal(launch.current(), { name = "pi", provider = "openai-codex", model = "gpt-5.5" }),
+    vim.inspect(launch.current())
+  )
+
+  local argv_of = function(opts)
+    local argv = require("fieldguide.rpc").argv(opts)
+    local function flag(name)
+      local i = vim.fn.index(argv, name)
+      return i >= 0 and argv[i + 2] or nil
+    end
+    return flag("--provider"), flag("--model")
+  end
+  cfg.options.provider, cfg.options.model = "openrouter", "from/setup"
+  local provider, model = argv_of({ provider = "openai-codex", model = "gpt-5.5" })
+  check(
+    "the wizard's pair is passed whole, never under setup()'s provider",
+    provider == "openai-codex" and model == "gpt-5.5",
+    vim.inspect({ provider, model })
+  )
+  provider, model = argv_of({})
+  check("...and setup()'s pair when the wizard gave none", provider == "openrouter" and model == "from/setup")
+  cfg.options.provider, cfg.options.model = nil, nil
+
+  pi_models = {}
+  reset({ named("pi"), starting("Not now") })
+  onboarding.run()
+  check(
+    "a pi that lists no models is not asked for one",
+    #asked == 2 and asked[2].prompt:find("plugin index", 1, true) ~= nil and launch.current().model == nil,
+    vim.inspect(vim.tbl_map(function(a)
+      return a.prompt
+    end, asked))
+  )
+end
+
+io.write("the plugin index\n")
+do
+  local index = require("fieldguide.index")
+  local fetch = index.fetch
+  local pending
+  index.fetch = function(opts)
+    pending = opts.on_done
+  end
+  local started = false
+  reset({ named("claude"), "", starting("Download") })
+  onboarding.run(function()
+    started = true
+  end)
+  check("a download asked for is started", pending ~= nil)
+  check("...and the session waits for it", not started)
+  if pending then
+    pending()
+  end
+  check("...then starts, with the index in place", started)
+  index.fetch = fetch
 end
 
 onboarding.check = real_check
