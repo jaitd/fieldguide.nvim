@@ -250,16 +250,37 @@ if (mode === "--tree-before" && process.env.FAKE_TREE_REFUSE) { console.error("c
     assert.match(res.stderr, /cannot checkpoint/);
   });
 
-  test("the end of a turn checks the tree once more, silently", async () => {
-    await reset();
-    const res = spawnSync(process.execPath, [hook(), "stop"], {
-      input: JSON.stringify({ hook_event_name: "Stop" }),
+  const stop = (input: Record<string, unknown>, env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, [hook(), "stop"], {
+      input: JSON.stringify({ hook_event_name: "Stop", ...input }),
       encoding: "utf8",
-      env: { PATH: process.env.PATH ?? "", FIELDGUIDE_CONFIG_DIR: zones.configRoot, FIELDGUIDE_VERBS: "state,verify", FAKE_TREE_CHANGED: "1" },
+      env: { PATH: process.env.PATH ?? "", FIELDGUIDE_CONFIG_DIR: zones.configRoot, FIELDGUIDE_VERBS: "state,verify", ...env },
     });
+
+  test("the end of a turn checks the tree once more, and says nothing when nothing changed", async () => {
+    await reset();
+    const res = stop({ stop_hook_active: false });
     assert.equal(res.status, 0, res.stderr);
     assert.equal(res.stdout, "");
     assert.deepEqual(await calls(), ["--tree-after"]);
+  });
+
+  test("a write found at the end of a turn is handed to the model, once", async () => {
+    // Codex shows a Stop hook's output nowhere; a block is how it reaches the
+    // model, which answers it in the same turn.
+    await reset();
+    const res = stop({ stop_hook_active: false }, { FAKE_TREE_CHANGED: "1" });
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout);
+    assert.equal(out.decision, "block");
+    assert.match(out.reason, /checkpoint def/);
+  });
+
+  test("...and never twice: a turn kept going by this hook is let end", async () => {
+    await reset();
+    const res = stop({ stop_hook_active: true }, { FAKE_TREE_CHANGED: "1" });
+    assert.equal(res.stdout, "");
+    assert.deepEqual(await calls(), ["--tree-after"], "the tree is still checked");
   });
 
   test("without verify, the shell and patches run with no server calls", async () => {

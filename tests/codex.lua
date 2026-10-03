@@ -305,6 +305,33 @@ do
 end
 
 do
+  -- Stopped by a subscriber as a run settles, with a prompt already queued:
+  -- nothing more is started.
+  local launched = 0
+  local s = codex.start({
+    cwd = root,
+    launch = function()
+      launched = launched + 1
+      return { FAKE, "exec", "--json", "-" }, {}
+    end,
+  })
+  local settled = 0
+  s:on_event(function(e)
+    if e.kind == "settled" then
+      settled = settled + 1
+      s:stop()
+    end
+  end)
+  s:prompt("one")
+  s:prompt("two")
+  vim.wait(5000, function()
+    return settled >= 1
+  end, 20)
+  vim.wait(500)
+  check("a session stopped as a run settles starts nothing more", launched == 1, ("launched=%d"):format(launched))
+end
+
+do
   -- A queued prompt whose launch fails is reported, and the queue moves on.
   local n = 0
   local s = codex.start({

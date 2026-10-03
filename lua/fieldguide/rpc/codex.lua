@@ -364,6 +364,11 @@ function Session:_settle()
   self._run = next_prompt and STARTING or nil
   self:_emit({ kind = "settled", session_id = self._norm.thread_id, raw = {} })
   if next_prompt then
+    -- A subscriber may have stopped the session on that `settled`.
+    if self._stopped then
+      self._run = nil
+      return
+    end
     self:_run_prompt(next_prompt)
   end
 end

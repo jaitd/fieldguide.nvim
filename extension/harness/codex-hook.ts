@@ -158,10 +158,25 @@ async function main(mode: string): Promise<void> {
     return;
   }
   // End of turn: anything a backgrounded command wrote after the last hook
-  // looked is checkpointed and verified now. Nothing is said: there is no
-  // tool result left to say it in.
+  // looked is checkpointed and verified now. Codex shows a Stop hook's output
+  // nowhere, so a report goes to the model as a block: the turn carries on
+  // just long enough for it to answer. Once only: a turn this hook already
+  // kept going (`stop_hook_active`) is let end, whatever the tree says.
   if (mode === "stop") {
-    if (hookEnv().verbs.has("verify")) treeAfter();
+    let active = false;
+    try {
+      active = (JSON.parse(readFileSync(0, "utf8")) as { stop_hook_active?: boolean }).stop_hook_active === true;
+    } catch {}
+    if (!hookEnv().verbs.has("verify")) return;
+    const text = treeAfter();
+    if (text && !active) {
+      process.stdout.write(
+        JSON.stringify({
+          decision: "block",
+          reason: `A write to the config was found after your last tool call, and checked:\n${text}`,
+        }),
+      );
+    }
     return;
   }
   let ev: HookEvent;
