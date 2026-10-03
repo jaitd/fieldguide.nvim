@@ -459,6 +459,31 @@ do
 end
 
 do
+  -- Stopped on purpose while the harness is still getting ready: that is a
+  -- stop, not a session that failed to start, and says nothing of the kind.
+  local polls = 0
+  local events = run({
+    prompts = { "never mind" },
+    ready_timeout_ms = 5000,
+    ready = function()
+      polls = polls + 1
+      return "still loading"
+    end,
+    done = function()
+      return polls >= 2
+    end,
+    before_stop = function(session)
+      session:stop()
+    end,
+  })
+  local refusals = vim.tbl_filter(function(e)
+    return e.source == "acp" and (e.message or ""):find("still loading", 1, true) ~= nil
+  end, of_kind(events, "error"))
+  check("a session stopped while getting ready is not reported as refused", #refusals == 0, vim.inspect(refusals))
+  check("...nor settled as a failed start", #of_kind(events, "settled") == 0, vim.inspect(of_kind(events, "settled")))
+end
+
+do
   local events = run({ prompts = { "gated" }, ready = function() end })
   check("a ready harness runs its prompt as usual", #of_kind(events, "run_end") >= 1)
 end

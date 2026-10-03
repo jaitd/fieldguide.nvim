@@ -82,19 +82,27 @@ function M.state_dir()
   return cfg.paths().state_dir .. "/harness/opencode"
 end
 
----Where the plugin says it has loaded, for this editor's launches.
+---Where one launch's plugin says it has loaded. A file per launch, never per
+---editor: two sessions started from one editor must not be able to vouch for
+---each other's plugin.
 ---@return string
-function M.ready_path()
-  return ("%s/gate-ready-%d"):format(M.state_dir(), vim.fn.getpid())
+local function new_ready_path()
+  return ("%s/gate-ready-%d-%d"):format(M.state_dir(), vim.fn.getpid(), vim.uv.hrtime())
 end
 
----Whether the gate plugin loaded, asked once opencode has a session. A
----plugin opencode could not load leaves only its own permissions between the
----agent and the disk, and it says so in nothing but its log. So no file is a
----refusal.
+---Whether the gate plugin of the launch whose `env()` named `path` loaded,
+---asked once opencode has a session. A plugin opencode could not load leaves
+---only its own permissions between the agent and the disk, and it says so in
+---nothing but its log. So no file is a refusal. The file has done its job once
+---it is seen, and is removed.
+---
+---  ready = function() return h.gate_ready(env.FIELDGUIDE_GATE_READY) end
+---
+---@param path string? the launch's FIELDGUIDE_GATE_READY
 ---@return string? error
-function M.gate_ready()
-  if vim.uv.fs_stat(M.ready_path()) then
+function M.gate_ready(path)
+  if path and vim.uv.fs_stat(path) then
+    vim.uv.fs_unlink(path)
     return nil
   end
   return "opencode did not load fieldguide's gate plugin, so the session is refused. "
@@ -285,11 +293,10 @@ function M.env(o)
   env.XDG_CACHE_HOME = xdg("XDG_CACHE_HOME", ".cache")
   -- The plugin's write hooks run mcp.ts on this node, which the sandbox binds.
   env.FIELDGUIDE_NODE = node_bin(o)
-  -- Cleared first, so a file left by an earlier launch never vouches for this
-  -- one.
+  -- A name no earlier launch has used, so no file left behind, and no other
+  -- session's plugin, can vouch for this one.
   vim.fn.mkdir(M.state_dir(), "p")
-  vim.uv.fs_unlink(M.ready_path())
-  env.FIELDGUIDE_GATE_READY = M.ready_path()
+  env.FIELDGUIDE_GATE_READY = new_ready_path()
   if o.mcp_socket then
     -- The write hooks ask the server on this socket rather than the editor,
     -- and nothing in opencode's process tree is handed the editor's address.

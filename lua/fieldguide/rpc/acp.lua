@@ -772,12 +772,17 @@ end
 ---deadline is a session that never started, and the agent behind it is stopped.
 ---@param deadline integer `vim.uv.now()` milliseconds
 function Session:_await_ready(deadline)
+  -- Stopped meanwhile: on purpose, or the agent died, which its exit event
+  -- already says. Either way not a start that failed, and nothing to add.
+  if not self:is_running() then
+    return
+  end
   local check = self._opts.ready
   local not_ready = check and check() or nil
   if not not_ready then
     self._ready = true
     self:_drain()
-  elseif vim.uv.now() >= deadline or not self:is_running() then
+  elseif vim.uv.now() >= deadline then
     self:_fail_start(not_ready, true)
     self:stop()
   else

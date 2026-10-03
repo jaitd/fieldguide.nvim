@@ -227,6 +227,21 @@ do
   check("the relay runs on it too", h.mcp(vim.tbl_extend("force", co, { mcp_socket = "/s" })).command == real)
 end
 
+io.write("gate readiness\n")
+do
+  -- One file per launch: a second session's plugin must never vouch for a
+  -- first session whose own plugin did not load.
+  local a = h.env(o).FIELDGUIDE_GATE_READY
+  local b = h.env(o).FIELDGUIDE_GATE_READY
+  check("each launch gets its own readiness file", a ~= b and a ~= nil and b ~= nil, vim.inspect({ a, b }))
+  vim.fn.writefile({ "1" }, b)
+  check("another launch's file does not vouch for this one", h.gate_ready(a) ~= nil)
+  check("this launch's own file does", h.gate_ready(b) == nil)
+  vim.fn.writefile({ "1" }, a)
+  check("...and so does the first's, once its plugin writes it", h.gate_ready(a) == nil)
+  check("no file named at all is not ready", h.gate_ready(nil) ~= nil)
+end
+
 io.write("preflight\n")
 do
   -- A stand-in opencode on PATH that reports the version under test.
