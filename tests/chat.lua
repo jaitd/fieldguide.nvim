@@ -852,6 +852,23 @@ do
   local _, seen = text:gsub("agent error:", "")
   check("...exactly once, though two events carry it", seen == 1, tostring(seen))
   check("...and the panel is not left thinking", st.status ~= "thinking", st.status)
+  check("an ordinary refusal gets no login hint", text:find("FieldguideSetup", 1, true) == nil, text)
+
+  -- No login for the model's provider: the error alone names no way out.
+  chat.stop()
+  chat.start({ argv = { FAILING, "auth" }, cwd = root })
+  st = chat._state()
+  vim.wait(3000, function()
+    return transcript():find("Authentication required", 1, true) ~= nil
+  end, 50)
+  vim.wait(100)
+  local auth = transcript()
+  local _, hints = auth:gsub("FieldguideSetup", "")
+  check(
+    "a refusal for want of a login says how to pick another model, once",
+    hints == 1 and auth:find("no login for this model's provider", 1, true) ~= nil,
+    auth
+  )
 
   chat.stop()
   chat.start({ argv = { FAILING, "length" }, cwd = root })

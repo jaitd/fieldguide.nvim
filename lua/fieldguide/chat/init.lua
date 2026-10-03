@@ -598,6 +598,11 @@ local function report_outcome(event)
   local s = state.sink
   s:ensure_newline()
   s:writeln(("> **%s**"):format(text))
+  -- A refusal for want of a login names no way out. The model is the usual
+  -- cause: an agent's own default can be a provider nobody logged in to.
+  if reason == "error" and tostring(event.error or ""):lower():find("authentication required", 1, true) then
+    s:writeln("> the agent has no login for this model's provider: `:FieldguideSetup` picks another model")
+  end
   set_status("idle")
 end
 
