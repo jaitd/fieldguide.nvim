@@ -20,7 +20,22 @@ set -u
 DELTAS="${1:-200}"
 HOLD="${2:-0}"
 
-emit() { printf '%s\n' "$1"; }
+# Two writers share stdout: the scripted stream in the background and the
+# command replies in the foreground. Each write takes this lock, so one never
+# lands inside the other. A 20KB line is many write(2)s, and a reply that slips
+# between them corrupts both lines. mkdir either makes the directory or
+# fails, which makes it a lock with nothing to install.
+LOCK=$(mktemp -d "${TMPDIR:-/tmp}/fake-agent.XXXXXX")/lock
+trap 'rm -rf "${LOCK%/lock}"' EXIT
+
+# Takes its arguments as printf does, so the U+2028 line can use escapes.
+emitf() {
+  until mkdir "$LOCK" 2>/dev/null; do sleep 0.001; done
+  # shellcheck disable=SC2059
+  printf "$@"
+  rmdir "$LOCK"
+}
+emit() { emitf '%s\n' "$1"; }
 
 # The event stream runs in the background and stdin is read in the foreground,
 # not the other way around. When job control is off — which it always is for a
@@ -49,7 +64,7 @@ emit "{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_de
 
 # U+2028 and U+2029 inside a string. A line reader that splits on these
 # corrupts the message; this is why the framer exists.
-printf '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"before\xe2\x80\xa8mid\xe2\x80\xa9after"}}\n'
+emitf '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"before\xe2\x80\xa8mid\xe2\x80\xa9after"}}\n'
 
 emit '{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"done"}}'
 
@@ -78,9 +93,6 @@ emit '{"type":"message_update", BROKEN'
 emit '{"type":"message_end","message":{"role":"assistant","content":"done"}}'
 emit '{"type":"turn_end","message":{},"toolResults":[]}'
 emit '{"type":"agent_end","willRetry":false}'
-
-# No trailing newline on the final line: flush() must still surface it.
-printf '{"type":"agent_settled"}'
 }
 
 emit_stream &
@@ -104,4 +116,9 @@ while :; do
     [ "$grace" -gt 3 ] && break
   fi
 done
+
+# No trailing newline on the final line: flush() must still surface it. Written
+# here, after the last reply, because anything written after it would be glued
+# onto it — which a real agent, writing its last line, never does.
+emitf '%s' '{"type":"agent_settled"}'
 exit 0
