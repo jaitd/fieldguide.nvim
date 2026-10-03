@@ -13,18 +13,22 @@
 //                     then the pre-write checkpoint; checkpoint and verify after
 //   Bash              allowed, the sandbox bounding it; checkpoint and verify
 //                     after any command that changed the config tree
+//   (end of turn)     the same, for a write a backgrounded command made later
 //   mcp__fieldguide__ our own verbs, narrowed on the Neovim side
 //
 // Anything else is refused. A refusal is exit 2 with the reason on stderr,
 // the one answer Codex treats as blocking.
+//
+// Whether the config tree changed is the MCP server's to know, not this
+// hook's: the hook runs inside the sandbox, where anything it kept the agent
+// could rewrite. The server, outside, fingerprints the tree and remembers it.
 
-import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAccess, isUnder, resolveTarget, type Decision, type Zones } from "../gate.ts";
 import { patchPaths } from "./patch.ts";
-import { afterWrite, beforeWrite, hookEnv } from "./write-hooks.ts";
+import { afterWrite, beforeWrite, hookEnv, treeAfter, treeBefore } from "./write-hooks.ts";
 
 export const MCP_PREFIX = "mcp__fieldguide__";
 
@@ -79,94 +83,6 @@ export async function decide(ev: HookEvent, zones: Zones): Promise<Verdict> {
 }
 
 // ---------------------------------------------------------------------------
-// The config tree, as of the last time fieldguide looked at it.
-// ---------------------------------------------------------------------------
-
-// Beyond this many entries the tree is not walked, and every shell command
-// counts as a change: a verify too many, never a write missed.
-const FINGERPRINT_LIMIT = 20_000;
-
-/**
- * What the config tree looks like: every entry's path, size and modification
- * time, hashed. A link is taken by where it points and what is there, so a
- * stow-style config changed through its dotfiles tree still counts. `.git` is
- * left out: a commit there is not a change to the config.
- */
-export function fingerprint(root: string): string {
-  const hash = createHash("sha256");
-  let count = 0;
-  const walk = (dir: string, rel: string): boolean => {
-    let names: string[];
-    try {
-      names = readdirSync(dir).sort();
-    } catch {
-      return true;
-    }
-    for (const name of names) {
-      if (name === ".git") continue;
-      if (++count > FINGERPRINT_LIMIT) return false;
-      const full = path.join(dir, name);
-      const at = rel ? `${rel}/${name}` : name;
-      let st;
-      try {
-        st = lstatSync(full);
-        if (st.isSymbolicLink()) st = statSync(full);
-      } catch {
-        hash.update(`${at}\0missing\n`);
-        continue;
-      }
-      if (st.isDirectory() && !lstatSync(full).isSymbolicLink()) {
-        hash.update(`${at}/\n`);
-        if (!walk(full, at)) return false;
-      } else {
-        hash.update(`${at}\0${st.size}\0${st.mtimeMs}\n`);
-      }
-    }
-    return true;
-  };
-  return walk(root, "") ? hash.digest("hex") : `unbounded-${Date.now()}`;
-}
-
-/** Where a session's fingerprints live, or undefined if the profile set none. */
-function stateDir(): string | undefined {
-  const dir = process.env.FIELDGUIDE_HOOK_STATE;
-  if (!dir) return undefined;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function readState(name: string): string | undefined {
-  const dir = stateDir();
-  if (!dir) return undefined;
-  try {
-    return readFileSync(path.join(dir, name), "utf8");
-  } catch {
-    return undefined;
-  }
-}
-
-function writeState(name: string, value: string) {
-  const dir = stateDir();
-  if (dir) writeFileSync(path.join(dir, name), value);
-}
-
-function takeState(name: string): string | undefined {
-  const value = readState(name);
-  const dir = stateDir();
-  if (dir) {
-    try {
-      unlinkSync(path.join(dir, name));
-    } catch {}
-  }
-  return value;
-}
-
-/** A tool_use_id as a file name: it comes from Codex, not from us. */
-function idName(id: string | undefined): string {
-  return `pre-${(id ?? "none").replace(/[^A-Za-z0-9_.-]/g, "_")}`;
-}
-
-// ---------------------------------------------------------------------------
 // The hooks.
 // ---------------------------------------------------------------------------
 
@@ -201,16 +117,10 @@ async function pre(ev: HookEvent): Promise<string | null> {
   }
 
   if (ev.tool_name === "Bash") {
-    // Changed since fieldguide last looked (the user's own edits, or a first
-    // command): committed now, so whatever this command does is undoable on
-    // its own rather than folded in with them.
-    const now = fingerprint(z.configRoot);
-    if (readState("last") !== now) {
-      const before = beforeWrite(z.configRoot);
-      if (!before.allow) return before.reason;
-      writeState("last", now);
-    }
-    writeState(idName(ev.tool_use_id), now);
+    // The user's own edits since the last checkpoint, committed now, so what
+    // this command does is undoable on its own.
+    const before = treeBefore();
+    if (!before.allow) return before.reason;
   }
   return null;
 }
@@ -230,21 +140,14 @@ async function post(ev: HookEvent): Promise<string | null> {
       if (!isUnder(target, z.configRoot)) continue;
       // One report per write, as pi gives: the first config path is the one
       // it names.
-      const text = afterWrite(target);
-      writeState("last", fingerprint(z.configRoot));
-      return text || null;
+      return afterWrite(target) || null;
     }
     return null;
   }
 
   if (ev.tool_name === "Bash") {
-    const before = takeState(idName(ev.tool_use_id));
-    const now = fingerprint(z.configRoot);
-    // Unchanged: an `ls`, a `cat`, a grep. Nothing to checkpoint or verify.
-    if (before !== undefined && before === now) return null;
-    const text = afterWrite(z.configRoot);
-    writeState("last", fingerprint(z.configRoot));
-    return text || null;
+    // Unchanged (an `ls`, a `cat`): the server says nothing, at no cost.
+    return treeAfter() || null;
   }
   return null;
 }
@@ -252,6 +155,13 @@ async function post(ev: HookEvent): Promise<string | null> {
 async function main(mode: string): Promise<void> {
   if (mode === "check") {
     process.stdout.write("ok\n");
+    return;
+  }
+  // End of turn: anything a backgrounded command wrote after the last hook
+  // looked is checkpointed and verified now. Nothing is said: there is no
+  // tool result left to say it in.
+  if (mode === "stop") {
+    if (hookEnv().verbs.has("verify")) treeAfter();
     return;
   }
   let ev: HookEvent;

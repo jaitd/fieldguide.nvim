@@ -9,12 +9,13 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { after, before, describe, test } from "node:test";
 
-import { decide, DENY_PREFIX, fingerprint, type HookEvent } from "../extension/harness/codex-hook.ts";
+import { decide, DENY_PREFIX, type HookEvent } from "../extension/harness/codex-hook.ts";
+import { fingerprint } from "../extension/harness/fingerprint.ts";
 import type { Zones } from "../extension/gate.ts";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -103,6 +104,21 @@ describe("fingerprint", () => {
     assert.notEqual(fingerprint(dir), one);
   });
 
+  test("sees a rewrite of the same length with its mtime put back", async () => {
+    // cp -p and rsync -t keep mtimes, and touch -r sets one back; the change
+    // time, which no unprivileged write can set, still moves.
+    const dir = await mkdtemp(path.join(root, "fp-"));
+    const file = path.join(dir, "a.lua");
+    await writeFile(file, "aaaa");
+    // A whole-second mtime, so putting it back is exact, as `touch -r` makes it.
+    await utimes(file, 1_700_000_000, 1_700_000_000);
+    const one = fingerprint(dir);
+    await new Promise((r) => setTimeout(r, 20));
+    await writeFile(file, "bbbb");
+    await utimes(file, 1_700_000_000, 1_700_000_000);
+    assert.notEqual(fingerprint(dir), one);
+  });
+
   test("sees a new file, and not a commit in .git", async () => {
     const dir = await mkdtemp(path.join(root, "fp-"));
     const one = fingerprint(dir);
@@ -121,23 +137,24 @@ describe("fingerprint", () => {
 describe("the hook process", () => {
   let tree: string;
   let log: string;
-  let state: string;
   before(async () => {
     tree = path.join(root, "plugin");
     await mkdir(path.join(tree, "extension/harness"), { recursive: true });
-    for (const f of ["extension/gate.ts", "extension/harness/patch.ts", "extension/harness/write-hooks.ts", "extension/harness/codex-hook.ts"]) {
+    for (const f of ["extension/gate.ts", "extension/harness/patch.ts", "extension/harness/write-hooks.ts", "extension/harness/codex-hook.ts", "extension/harness/fingerprint.ts"]) {
       await copyFile(path.join(REPO, f), path.join(tree, f));
     }
     log = path.join(root, "server.log");
-    state = path.join(root, "hook-state");
     // Logs every call; refuses a path with "refuse-me" the way mcp.ts does.
     await writeFile(
       path.join(tree, "extension/mcp.ts"),
       `import { appendFileSync } from "node:fs";
 const [mode, target] = process.argv.slice(2);
-appendFileSync(${JSON.stringify(log)}, mode + " " + target + "\\n");
+appendFileSync(${JSON.stringify(log)}, [mode, target].filter(Boolean).join(" ") + "\\n");
 if (mode === "--before-write" && target.includes("refuse-me")) { console.error("nope: " + target); process.exit(2); }
 if (mode === "--after-write") console.log("[fieldguide] boot OK, 9ms; checkpoint abc");
+// The server decides whether the tree changed; here, the test does.
+if (mode === "--tree-after" && process.env.FAKE_TREE_CHANGED) console.log("[fieldguide] boot OK, 7ms; checkpoint def");
+if (mode === "--tree-before" && process.env.FAKE_TREE_REFUSE) { console.error("cannot checkpoint: index.lock"); process.exit(1); }
 `,
     );
   });
@@ -152,14 +169,12 @@ if (mode === "--after-write") console.log("[fieldguide] boot OK, 9ms; checkpoint
         FIELDGUIDE_CONFIG_DIR: zones.configRoot,
         FIELDGUIDE_DOC_ROOTS: zones.docRoots.join(":"),
         FIELDGUIDE_VERBS: "state,verify",
-        FIELDGUIDE_HOOK_STATE: state,
         ...env,
       },
     });
   const calls = async () => (await readFile(log, "utf8").catch(() => "")).split("\n").filter(Boolean);
   const reset = async () => {
     await writeFile(log, "");
-    await rm(state, { recursive: true, force: true });
   };
 
   test("a refusal is exit 2 with the reason, and the server is never asked", async () => {
@@ -210,40 +225,41 @@ if (mode === "--after-write") console.log("[fieldguide] boot OK, 9ms; checkpoint
     assert.deepEqual(await calls(), []);
   });
 
-  test("a shell command that changes nothing costs no checkpoint and no verify", async () => {
+  test("a shell command asks the server before and after, and keeps nothing itself", async () => {
     await reset();
-    const first = ev("Bash", { command: "cat init.lua" }, { tool_use_id: "b1" });
-    assert.equal(run("pre", first).status, 0);
-    // The first command of a session commits the tree as it stands.
-    assert.deepEqual(await calls(), [`--before-write ${zones.configRoot}`]);
-    const post = run("post", { ...first, hook_event_name: "PostToolUse" });
-    assert.equal(post.stdout, "", "nothing changed, nothing to say");
-    const second = ev("Bash", { command: "ls" }, { tool_use_id: "b2" });
-    run("pre", second);
-    run("post", { ...second, hook_event_name: "PostToolUse" });
-    assert.deepEqual(await calls(), [`--before-write ${zones.configRoot}`], "no further server calls");
-  });
-
-  test("a shell command that changes the config is checkpointed and verified", async () => {
-    await reset();
-    const cmd = ev("Bash", { command: "echo x >> init.lua" }, { tool_use_id: "b3" });
-    run("pre", cmd);
-    await writeFile(path.join(zones.configRoot, "init.lua"), "-- config\nvim.g.x = 1\n");
+    const cmd = ev("Bash", { command: "ls" }, { tool_use_id: "b1" });
+    assert.equal(run("pre", cmd).status, 0);
     const post = run("post", { ...cmd, hook_event_name: "PostToolUse" });
-    assert.match(JSON.parse(post.stdout).hookSpecificOutput.additionalContext, /boot OK/);
-    assert.deepEqual(await calls(), [`--before-write ${zones.configRoot}`, `--after-write ${zones.configRoot}`]);
+    assert.deepEqual(await calls(), ["--tree-before", "--tree-after"]);
+    assert.equal(post.stdout, "", "the server saw no change, so nothing is said");
   });
 
-  test("the user's own edits between commands are committed before the next one runs", async () => {
+  test("when the server finds the tree changed, the model is told what verify said", async () => {
     await reset();
-    const a = ev("Bash", { command: "ls" }, { tool_use_id: "b4" });
-    run("pre", a);
-    run("post", { ...a, hook_event_name: "PostToolUse" });
-    await writeFile(log, "");
-    await writeFile(path.join(zones.configRoot, "lua/mine.lua"), "-- by hand\n");
-    const b = ev("Bash", { command: "ls" }, { tool_use_id: "b5" });
-    run("pre", b);
-    assert.deepEqual(await calls(), [`--before-write ${zones.configRoot}`], "a checkpoint of the user's change first");
+    const cmd = ev("Bash", { command: "echo x >> init.lua" }, { tool_use_id: "b2" });
+    run("pre", cmd);
+    const post = run("post", { ...cmd, hook_event_name: "PostToolUse" }, { FAKE_TREE_CHANGED: "1" });
+    assert.match(JSON.parse(post.stdout).hookSpecificOutput.additionalContext, /checkpoint def/);
+  });
+
+  test("a shell command the server cannot checkpoint before is refused", async () => {
+    // The user's edits would otherwise be folded into whatever it writes.
+    await reset();
+    const res = run("pre", ev("Bash", { command: "ls" }), { FAKE_TREE_REFUSE: "1" });
+    assert.equal(res.status, 2);
+    assert.match(res.stderr, /cannot checkpoint/);
+  });
+
+  test("the end of a turn checks the tree once more, silently", async () => {
+    await reset();
+    const res = spawnSync(process.execPath, [hook(), "stop"], {
+      input: JSON.stringify({ hook_event_name: "Stop" }),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", FIELDGUIDE_CONFIG_DIR: zones.configRoot, FIELDGUIDE_VERBS: "state,verify", FAKE_TREE_CHANGED: "1" },
+    });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout, "");
+    assert.deepEqual(await calls(), ["--tree-after"]);
   });
 
   test("without verify, the shell and patches run with no server calls", async () => {

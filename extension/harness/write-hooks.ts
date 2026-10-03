@@ -35,12 +35,13 @@ const SERVER = path.join(ROOT, "extension", "mcp.ts");
  * server, a timeout — is a deny too: a write with no checkpoint behind it cannot
  * be undone the way the panel promises.
  */
-export function beforeWrite(target: string): Decision {
+export function beforeWrite(target: string, mode = "--before-write"): Decision {
   if (!existsSync(SERVER)) return { allow: false, reason: `cannot checkpoint before writing: ${SERVER} is missing` };
   // Past mcp.ts's own 75s wait on the server, so its refusal arrives first,
   // and short of the harness's 90s on the hook (Claude's and Codex's alike).
   // See the hook timeouts in lua/fieldguide/harness/claude.lua for the chain.
-  const res = spawnSync(process.execPath, [SERVER, "--before-write", target], { encoding: "utf8", timeout: 80_000 });
+  const args = mode === "--before-write" ? [SERVER, mode, target] : [SERVER, mode];
+  const res = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 80_000 });
   if (res.status === 0) return { allow: true };
   const why = (res.stderr || "").trim() || res.error?.message || `exit ${res.status ?? res.signal}`;
   return { allow: false, reason: res.status === 2 ? why : `cannot checkpoint before writing: ${why}` };
@@ -50,11 +51,26 @@ export function beforeWrite(target: string): Decision {
  * Checkpoint and verify, as one paragraph for the model. Failure is content.
  * Empty means the server had nothing to say about this path.
  */
-export function afterWrite(target: string): string {
+export function afterWrite(target: string, mode = "--after-write"): string {
   if (!existsSync(SERVER)) return `[fieldguide] verify unavailable: ${SERVER} is missing`;
   // Past mcp.ts's 135s, short of the harness's 150s.
-  const res = spawnSync(process.execPath, [SERVER, "--after-write", target], { encoding: "utf8", timeout: 140_000 });
+  const args = mode === "--after-write" ? [SERVER, mode, target] : [SERVER, mode];
+  const res = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 140_000 });
   if (res.status === 0) return (res.stdout || "").trim();
   return `[fieldguide] verify unavailable: ${(res.stderr || "").trim() || res.error?.message || `exit ${res.status}`}`;
 }
 
+/**
+ * Before a command that may write the config tree without saying so (a
+ * shell): the server checkpoints the tree if it changed since it last did, so
+ * the user's own edits are their own point in history. It keeps that state
+ * itself, out of the agent's reach; see `treeHook` in extension/mcp.ts.
+ */
+export function treeBefore(): Decision {
+  return beforeWrite("", "--tree-before");
+}
+
+/** After one: checkpoint and verify if the tree changed, or "" if not. */
+export function treeAfter(): string {
+  return afterWrite("", "--tree-after");
+}
