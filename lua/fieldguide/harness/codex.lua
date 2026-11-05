@@ -92,11 +92,18 @@ local function package_of(launcher)
   end
   local text = f:read(8192) or ""
   f:close()
-  local rel = text:match('"%$basedir/([^"]-@openai/codex/bin/codex%.js)"')
-  if not rel then
-    return nil
+  -- pnpm 11 and later record the script's absolute path in a comment, and
+  -- name it from `$basedir_abs` rather than `$basedir`; pnpm 10 has neither.
+  local js = text:match("\n# cmd%-shim%-target=([^\n]-@openai/codex/bin/codex%.js)")
+  if not js then
+    local rel = text:match('"%$basedir/([^"]-@openai/codex/bin/codex%.js)"')
+      or text:match('"%$basedir_abs/([^"]-@openai/codex/bin/codex%.js)"')
+    if not rel then
+      return nil
+    end
+    js = vim.fs.dirname(launcher) .. "/" .. rel
   end
-  local js = real(vim.fs.dirname(launcher) .. "/" .. rel)
+  js = real(js)
   return js and vim.fs.dirname(vim.fs.dirname(js)) or nil
 end
 
@@ -146,7 +153,8 @@ end
 ---@return integer[]? version
 local function version_of(bin)
   local r = vim.system({ bin, "--version" }, { text = true }):wait(10000)
-  local major, minor, patch = ((r.stdout or "") .. (r.stderr or "")):match("(%d+)%.(%d+)%.(%d+)")
+  -- By Codex's own banner, so another binary's version is not taken for one.
+  local major, minor, patch = ((r.stdout or "") .. (r.stderr or "")):match("codex%-cli (%d+)%.(%d+)%.(%d+)")
   return major and { tonumber(major), tonumber(minor), tonumber(patch) } or nil
 end
 

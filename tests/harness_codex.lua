@@ -328,6 +328,25 @@ do
     }, wrapper)
     vim.uv.fs_chmod(wrapper, tonumber("755", 8))
     check("behind pnpm's wrapper too", h.binary({ codex = wrapper }) == found, tostring(h.binary({ codex = wrapper })))
+
+    -- pnpm 11 and later: `$basedir_abs`, and the target's absolute path in a
+    -- trailing comment. Each on its own, so losing either is caught.
+    local js = scratch .. "/npm/node_modules/@openai/codex/bin/codex.js"
+    local shims = {
+      ["pnpm 11's wrapper, by $basedir_abs"] = {
+        "#!/bin/sh",
+        'exec node  "$basedir_abs/../../npm/node_modules/@openai/codex/bin/codex.js" "$@"',
+      },
+      ["pnpm 11's wrapper, by its cmd-shim-target"] = {
+        "#!/bin/sh",
+        'exec node  "$somewhere_else/codex.js" "$@"',
+        "# cmd-shim-target=" .. js,
+      },
+    }
+    for name, lines in pairs(shims) do
+      vim.fn.writefile(lines, wrapper)
+      check(name, h.binary({ codex = wrapper }) == found, tostring(h.binary({ codex = wrapper })))
+    end
   end
   check("a native binary is itself", h.binary({ codex = native }) == native)
   check("nothing to be found is nil", h.binary({ codex = scratch .. "/no-such-codex" }) == nil)
