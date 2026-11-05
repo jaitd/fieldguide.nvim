@@ -67,23 +67,24 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 12
 
       # PNPM_HOME is set here rather than left to the action: without a global
       # bin directory `pnpm add -g` fails outright, and there is no package.json
       # in this repo for the action to read a store location from. GITHUB_PATH
       # only reaches later steps, but pnpm refuses a global install unless the
       # bin directory is on PATH already, so this step exports it for itself.
+      # pnpm 11 and later keep that directory at $PNPM_HOME/bin.
       - name: Install pi
         if: ${{ env.NO_LLM != 'true' }}
         run: |
           export PNPM_HOME="$HOME/.local/share/pnpm"
-          export PATH="$PNPM_HOME:$PATH"
-          mkdir -p "$PNPM_HOME"
-          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+          export PATH="$PNPM_HOME/bin:$PATH"
+          mkdir -p "$PNPM_HOME/bin"
+          echo "$PNPM_HOME/bin" >> "$GITHUB_PATH"
           echo "PNPM_HOME=$PNPM_HOME" >> "$GITHUB_ENV"
           pnpm add -g @earendil-works/pi-coding-agent
-          "$PNPM_HOME/pi" --version
+          "$PNPM_HOME/bin/pi" --version
 
       # The catalog pi ships with lags OpenRouter's, and a model it does not
       # know it runs as a bare custom id with no reasoning support — so
