@@ -137,6 +137,8 @@ function M.normalize(raw)
       command = raw.command,
       success = raw.success == true,
       error = raw.error,
+      -- A prompt's: "started", "queued" or "handled" (pi 0.99 and later).
+      disposition = type(raw.data) == "table" and raw.data.disposition or nil,
       raw = raw,
     }
   end

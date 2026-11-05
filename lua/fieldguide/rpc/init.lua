@@ -188,6 +188,11 @@ function Session:_on_line(line)
     self._pending[event.id] = nil
   end
   self:_emit(event)
+  -- A prompt pi handled itself, a command among them, starts no run, so no
+  -- agent_settled follows it. Anything waiting on one would wait forever.
+  if event.kind == "response" and event.command == "prompt" and event.disposition == "handled" then
+    self:_emit({ kind = "settled", handled = true, raw = decoded })
+  end
 end
 
 function Session:_finish_stream()

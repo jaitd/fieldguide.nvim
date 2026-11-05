@@ -221,6 +221,21 @@ do
   check("...while fire-and-forget would not be", not events.needs_reply({ kind = "ui_request", method = "notify" }))
 end
 
+io.write("a prompt pi handles itself\n")
+do
+  -- pi 0.99 and later: a handled prompt starts no run, so no agent_settled.
+  local got = {}
+  local line = '{"type":"response","id":"p1","command":"prompt","success":true,"data":{"disposition":"handled"}}'
+  local session = assert(rpc.start({ argv = { "sh", "-c", ("printf '%%s\\n' '%s'"):format(line) } }))
+  session:on_event(function(e)
+    table.insert(got, e.kind)
+  end)
+  vim.wait(10000, function()
+    return vim.tbl_contains(got, "exit")
+  end, 20)
+  check("is settled all the same", vim.deep_equal({ "response", "settled", "exit" }, got), vim.inspect(got))
+end
+
 io.write("lifecycle\n")
 do
   local exits = of_kind(collected, "exit")
