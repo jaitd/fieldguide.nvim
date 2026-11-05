@@ -12,35 +12,17 @@
 
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { piModulePaths } from "./pi-modules.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION = path.join(HERE, "..", "extension", "nvim.ts");
-
-/** pi's launcher exports a NODE_PATH naming its private module directories. */
-function piModulePaths(): string[] {
-  // `command -v` exits non-zero when pi is absent, and execFileSync turns a
-  // non-zero exit into a throw. Without this the "skips itself" promise above
-  // is only kept on machines that do have pi — the Linux container has none.
-  let launcher = "";
-  try {
-    launcher = execFileSync("sh", ["-c", "command -v pi"], { encoding: "utf8" }).trim();
-  } catch {
-    return [];
-  }
-  if (!launcher) return [];
-  const source = readFileSync(launcher, "utf8");
-  const match = source.match(/NODE_PATH="([^"]+)"/);
-  return match ? match[1].split(":").filter(Boolean) : [];
-}
 
 type StubTool = {
   name: string;

@@ -8,9 +8,9 @@
 // the shadow repo of the config you actually use.
 
 import assert from "node:assert/strict";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { DatabaseSync } from "node:sqlite";
@@ -19,6 +19,7 @@ import * as path from "node:path";
 import { after, before, test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { piModulePaths } from "./pi-modules.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, "..");
@@ -253,19 +254,6 @@ test("tools/list", async (t) => {
     assert.equal(plugins.inputSchema.properties.check.items.type, "string");
   });
 });
-
-/** pi's launcher exports a NODE_PATH naming its private module directories. */
-function piModulePaths(): string[] {
-  let launcher = "";
-  try {
-    launcher = execFileSync("sh", ["-c", "command -v pi"], { encoding: "utf8" }).trim();
-  } catch {
-    return [];
-  }
-  if (!launcher) return [];
-  const match = readFileSync(launcher, "utf8").match(/NODE_PATH="([^"]+)"/);
-  return match ? match[1].split(":").filter(Boolean) : [];
-}
 
 test("the typebox shim emits what typebox emits", async (t) => {
   // mcp.ts stands a shim in for typebox so it runs without pi. Where pi *is*
