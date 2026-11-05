@@ -8,7 +8,7 @@
 #
 #   nvim   0.12+     (jobstart({term=true}), vim.loader.find, vim.system)
 #   node   24+       (the LTS, named in .node-version)
-#   pi     0.79+     (tool_result hook, extension tool registry)
+#   pi     0.99+     (builtin:<name> extensions, tool_result hook)
 #   bwrap  0.10+     (verify's sandbox on Linux; refuses to run unsandboxed)
 #   sandbox-exec     (verify's sandbox on macOS; ships with the OS)
 #   git    2.x       (shadow repo)

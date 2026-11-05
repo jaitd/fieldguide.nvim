@@ -41,6 +41,10 @@ function M.argv()
     "--no-extensions",
     "--no-skills",
     "--no-prompt-templates",
+    -- pi 1.0 defaults to fullscreen, which takes over the terminal buffer and
+    -- its scrollback; regular is what earlier versions did.
+    "--tui-mode",
+    "regular",
     "--append-system-prompt",
     root .. "/prompt/system.md",
     "--extension",
@@ -48,12 +52,14 @@ function M.argv()
     "--tools",
     table.concat(tools, ","),
   }
-  if o.provider then
+  -- As the panel does: pi 1.0 refuses `--provider` without `--model`.
+  if o.provider and o.model then
     vim.list_extend(argv, { "--provider", o.provider })
   end
   if o.model then
     vim.list_extend(argv, { "--model", o.model })
   end
+  vim.list_extend(argv, require("fieldguide.harness.pi").builtins(o.model and o.provider, o.model))
   return argv
 end
 

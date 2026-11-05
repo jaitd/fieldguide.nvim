@@ -92,11 +92,18 @@ local function package_of(launcher)
   end
   local text = f:read(8192) or ""
   f:close()
-  local rel = text:match('"%$basedir/([^"]-@openai/codex/bin/codex%.js)"')
-  if not rel then
-    return nil
+  -- pnpm 11 and later record the script's absolute path in a comment, and
+  -- name it from `$basedir_abs` rather than `$basedir`; pnpm 10 has neither.
+  local js = text:match("\n# cmd%-shim%-target=([^\n]-@openai/codex/bin/codex%.js)")
+  if not js then
+    local rel = text:match('"%$basedir/([^"]-@openai/codex/bin/codex%.js)"')
+      or text:match('"%$basedir_abs/([^"]-@openai/codex/bin/codex%.js)"')
+    if not rel then
+      return nil
+    end
+    js = vim.fs.dirname(launcher) .. "/" .. rel
   end
-  local js = real(vim.fs.dirname(launcher) .. "/" .. rel)
+  js = real(js)
   return js and vim.fs.dirname(vim.fs.dirname(js)) or nil
 end
 
@@ -146,7 +153,8 @@ end
 ---@return integer[]? version
 local function version_of(bin)
   local r = vim.system({ bin, "--version" }, { text = true }):wait(10000)
-  local major, minor, patch = ((r.stdout or "") .. (r.stderr or "")):match("(%d+)%.(%d+)%.(%d+)")
+  -- By Codex's own banner, so another binary's version is not taken for one.
+  local major, minor, patch = ((r.stdout or "") .. (r.stderr or "")):match("codex%-cli (%d+)%.(%d+)%.(%d+)")
   return major and { tonumber(major), tonumber(minor), tonumber(patch) } or nil
 end
 
@@ -187,7 +195,13 @@ end
 ---memories and sessions are not there to be read, and the login is not a
 ---copy. Codex writes auth.json in place, through the link, so a refreshed
 ---token lands in the user's file.
----@return string home, string? login the user's auth.json, when there is one
+---
+---auth.lock is linked the same way. Since 0.164 Codex takes a lock on it
+---around each write of the login, and only one lock shared with the user's
+---own Codex keeps two token refreshes from writing over each other. Codex
+---creates it if missing and never removes it, so it is created here first,
+---as Codex would, to have a file to link and bind.
+---@return string home, string? login the user's auth.json, when there is one, string? lock
 function M.codex_home()
   local home = M.state_dir() .. "/home"
   vim.fn.mkdir(home, "p")
@@ -195,12 +209,26 @@ function M.codex_home()
   if not vim.uv.fs_stat(login) then
     return home, nil
   end
-  local link = home .. "/auth.json"
-  if vim.uv.fs_readlink(link) ~= login then
-    vim.uv.fs_unlink(link)
-    vim.uv.fs_symlink(login, link)
+  local function link(target, name)
+    local at = home .. "/" .. name
+    if vim.uv.fs_readlink(at) ~= target then
+      vim.uv.fs_unlink(at)
+      vim.uv.fs_symlink(target, at)
+    end
   end
-  return home, login
+  link(login, "auth.json")
+  local lock = user_home() .. "/auth.lock"
+  if not vim.uv.fs_stat(lock) then
+    local fd = vim.uv.fs_open(lock, "a", tonumber("600", 8))
+    if fd then
+      vim.uv.fs_close(fd)
+    end
+  end
+  if not vim.uv.fs_stat(lock) then
+    return home, login
+  end
+  link(lock, "auth.lock")
+  return home, login, lock
 end
 
 -- Read back from the end of a log in pieces this size: the model is in the
@@ -502,11 +530,13 @@ function M.needs(o)
   local node = node_bin(o)
   add(ro, node and vim.fs.dirname(vim.fs.dirname(node)) or nil)
 
-  local home, login = M.codex_home()
+  local home, login, lock = M.codex_home()
   -- Sessions, the thread store and the model cache; and the login itself,
-  -- bound as the file the link in `home` names, written in place.
+  -- bound as the file the link in `home` names, written in place, with the
+  -- lock the user's own Codex takes around writing it.
   add(rw, home)
   add(rw, login)
+  add(rw, lock)
   add(rw, M.shell_home())
   return { ro = ro, rw = rw }
 end

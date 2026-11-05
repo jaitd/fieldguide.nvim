@@ -74,12 +74,15 @@ function M.argv(opts)
   if opts.model then
     provider, model = opts.provider, opts.model
   end
-  if provider then
+  -- A provider only with a model: pi 1.0 refuses `--provider` alone, which
+  -- earlier versions ignored, so leaving it off keeps what those did.
+  if provider and model then
     vim.list_extend(argv, { "--provider", provider })
   end
   if model then
     vim.list_extend(argv, { "--model", model })
   end
+  vim.list_extend(argv, require("fieldguide.harness.pi").builtins(model and provider, model))
   return argv
 end
 
@@ -185,6 +188,11 @@ function Session:_on_line(line)
     self._pending[event.id] = nil
   end
   self:_emit(event)
+  -- A prompt pi handled itself, a command among them, starts no run, so no
+  -- agent_settled follows it. Anything waiting on one would wait forever.
+  if event.kind == "response" and event.command == "prompt" and event.disposition == "handled" then
+    self:_emit({ kind = "settled", handled = true, raw = decoded })
+  end
 end
 
 function Session:_finish_stream()

@@ -115,7 +115,7 @@ do
   pi = onboarding.check()[1]
   check(
     "a pi older than the minimum is not ready",
-    not pi.ready and (pi.why or ""):find("older than the minimum 0.79.0", 1, true) ~= nil,
+    not pi.ready and (pi.why or ""):find("older than the minimum 0.99.0", 1, true) ~= nil,
     vim.inspect(pi)
   )
   cfg.options.cmd = FAKE

@@ -72,7 +72,7 @@ spent a weekend on.
 
 You need Neovim 0.12+, node 24+, git, a sandbox (`bwrap` on Linux,
 `sandbox-exec` on macOS) and [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
-0.79+ with a model provider. [mise](https://mise.jdx.dev) is optional but makes
+0.99+ with a model provider. [mise](https://mise.jdx.dev) is optional but makes
 everything below one command. From a clone of your fork:
 
 ```sh

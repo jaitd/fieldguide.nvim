@@ -4,7 +4,7 @@
 --
 --   1. opencode's own config: no shell, no network, no subagents, no skills;
 --      writes allowed, directories outside the config and doc zones denied.
---   2. The plugin (extension/harness/opencode/fieldguide.ts): the three-zone gate
+--   2. The plugin (extension/harness/opencode/plugin.ts): the three-zone gate
 --      from gate.ts on every tool call, refusing any tool it does not know,
 --      and pi's checkpoint-and-verify around every write.
 --   3. The agent sandbox, when there is one: `needs()` says what opencode must
@@ -109,6 +109,10 @@ function M.gate_ready(path)
     .. "Check that this is opencode 2 and see its log for the reason."
 end
 
+---How to install opencode 2, said wherever a 1.x is refused. Its npm package
+---is @opencode/cli; `opencode-ai`, whose latest is still 1.x, is the old one.
+local INSTALL_HINT = " (npm i -g @opencode/cli, or curl -fsSL https://opencode.ai/v2/install | bash)"
+
 ---Launch-time problems, said before a process is spawned. Only opencode 2:
 ---its plugin API, tool names and credential store all differ from 1.x, and
 ---a 1.x would run without the gate.
@@ -123,10 +127,10 @@ function M.preflight(_)
   local version = vim.trim((r.stdout or "") .. " " .. (r.stderr or ""))
   local major = tonumber(version:match("v?(%d+)%.%d+"))
   if not major then
-    return ("cannot tell which opencode this is (%q); fieldguide needs opencode 2"):format(version)
+    return ("cannot tell which opencode this is (%q); fieldguide needs opencode 2"):format(version) .. INSTALL_HINT
   end
   if major < 2 then
-    return ("this is opencode %s; fieldguide needs opencode 2"):format(version:match("v?(%d+[%d.]*)"))
+    return ("this is opencode %s; fieldguide needs opencode 2"):format(version:match("v?(%d+[%d.]*)")) .. INSTALL_HINT
   end
   return nil
 end
@@ -167,6 +171,10 @@ function M.config(o)
       skill = false,
       -- Asks the user, through a UI fieldguide does not show.
       question = false,
+      -- Image generation: opt-in in 2.2.1, on by default from 2.2.2 when a
+      -- provider can make images, under the second name.
+      image_generate = false,
+      experimental_image_generate = false,
     },
     permission = {
       shell = "deny",

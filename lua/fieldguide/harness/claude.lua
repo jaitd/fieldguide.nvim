@@ -148,12 +148,41 @@ local function hook_path(o)
   return o.root .. "/extension/harness/claude/hook.ts"
 end
 
+---The oldest Claude Code the settings below are safe on. 2.1.295 added the
+---hook's `onFailure`, without which a gate that times out lets the tool run;
+---2.1.314 made `--setting-sources` keep the user's own files from supplying
+---permission rules. An older Claude in -p mode may drop a settings file it
+---cannot validate, and the gate with it, so it is refused rather than tried.
+M.MIN_VERSION = { 2, 1, 314 }
+
+---@return integer[]? version
+local function version_of()
+  local r = vim.system({ "claude", "--version" }, { text = true }):wait(10000)
+  local major, minor, patch = ((r.stdout or "") .. (r.stderr or "")):match("(%d+)%.(%d+)%.(%d+) %(Claude Code%)")
+  return major and { tonumber(major), tonumber(minor), tonumber(patch) } or nil
+end
+
 ---Launch-time problems, said before a process is spawned.
 ---@param o fieldguide.HarnessOpts
 ---@return string? error
 function M.preflight(o)
   if vim.fn.executable("claude") == 0 then
     return '"claude" is not on PATH'
+  end
+  local v = version_of()
+  if not v then
+    return "cannot tell which Claude Code this is; fieldguide needs " .. table.concat(M.MIN_VERSION, ".") .. " or later"
+  end
+  for i = 1, 3 do
+    if v[i] ~= M.MIN_VERSION[i] then
+      if v[i] < M.MIN_VERSION[i] then
+        return ("this is Claude Code %s; fieldguide needs %s or later (claude update)"):format(
+          table.concat(v, "."),
+          table.concat(M.MIN_VERSION, ".")
+        )
+      end
+      break
+    end
   end
   local node = node_bin(o)
   if not node then
@@ -193,17 +222,23 @@ function M.settings(o)
       PreToolUse = {
         {
           matcher = "*",
-          -- A timed-out hook is a non-blocking error too. Generous, because the
-          -- pre-write step checkpoints through the editor.
-          -- `|| exit 2` makes any failure to run the gate a refusal: exit 2 is
-          -- the one code Claude treats as blocking, and a node that cannot
-          -- start, inside a sandbox preflight never saw, exits 126 or 127.
-          -- A timed-out hook is a non-blocking error too, so Claude's limit is
-          -- the outermost of the chain: the checkpoint verb (60s), mcp.ts
-          -- --before-write waiting on it (75s), the hook waiting on
-          -- that (80s), and this. Each gives up after the one inside it, so
-          -- the refusal comes from the hook, not from a timeout.
-          hooks = { { type = "command", command = ("%s %s pre || exit 2"):format(node, hook), timeout = 90 } },
+          -- `onFailure = "block"` makes a gate that cannot start, times out,
+          -- or exits with a code other than 0 or 2 a refusal; without it each
+          -- of those is a non-blocking error and the tool runs ungated.
+          -- `|| exit 2` stays, so a node that cannot start (126 or 127,
+          -- inside a sandbox preflight never saw) refuses with its own reason.
+          -- Claude's limit is still the outermost of the chain: the checkpoint
+          -- verb (60s), mcp.ts --before-write waiting on it (75s), the hook
+          -- waiting on that (80s), and this. Each gives up after the one
+          -- inside it, so the refusal names its cause, not a timeout.
+          hooks = {
+            {
+              type = "command",
+              command = ("%s %s pre || exit 2"):format(node, hook),
+              timeout = 90,
+              onFailure = "block",
+            },
+          },
         },
       },
       PostToolUse = {
