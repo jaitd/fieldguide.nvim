@@ -68,6 +68,16 @@ do
   -- The index tools are allowlisted on this entry point too; the extension
   -- decides whether to register them.
   check("index tools allowlisted in the sidebar", argv:find("nvim_plugins", 1, true) ~= nil, argv)
+  check("the sidebar is not fullscreen", argv:find("--tui-mode regular", 1, true) ~= nil, argv)
+
+  -- pi 1.0 refuses --provider without --model; earlier versions ignored it.
+  cfg.setup({ provider = "openrouter" })
+  argv = table.concat(ui.argv(), " ")
+  check("a provider alone is not passed", not argv:find("--provider", 1, true), argv)
+  cfg.setup({ provider = "openrouter", model = "m" })
+  argv = table.concat(ui.argv(), " ")
+  check("...but is with a model", argv:find("--provider openrouter --model m", 1, true) ~= nil, argv)
+  cfg.setup({})
 
   local env = ui.env()
   check("the socket is handed over explicitly", env.FIELDGUIDE_ADDR ~= nil, vim.inspect(env))
@@ -120,6 +130,13 @@ do
   local argv = table.concat(require("fieldguide.rpc").argv(), " ")
 
   check("rpc mode is requested", argv:find("--mode rpc", 1, true) ~= nil, argv)
+  cfg.setup({ provider = "openrouter" })
+  local alone = table.concat(require("fieldguide.rpc").argv(), " ")
+  check("a provider alone is not passed", not alone:find("--provider", 1, true), alone)
+  cfg.setup({ provider = "openrouter", model = "m" })
+  local paired = table.concat(require("fieldguide.rpc").argv(), " ")
+  check("...but is with a model", paired:find("--provider openrouter --model m", 1, true) ~= nil, paired)
+  cfg.setup({})
   check("no bash in the tool allowlist", not argv:find("bash"), argv)
   for _, flag in ipairs({ "--no-extensions", "--no-skills", "--no-prompt-templates" }) do
     check("hermetic: " .. flag, argv:find(flag, 1, true) ~= nil, argv)

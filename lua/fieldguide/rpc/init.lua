@@ -74,7 +74,9 @@ function M.argv(opts)
   if opts.model then
     provider, model = opts.provider, opts.model
   end
-  if provider then
+  -- A provider only with a model: pi 1.0 refuses `--provider` alone, which
+  -- earlier versions ignored, so leaving it off keeps what those did.
+  if provider and model then
     vim.list_extend(argv, { "--provider", provider })
   end
   if model then
