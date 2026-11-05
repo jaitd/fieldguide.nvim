@@ -149,8 +149,8 @@ do
     vim.uv.fs_readlink(env.CODEX_HOME .. "/auth.json") == user_home .. "/auth.json"
   )
   check(
-    "...and nothing else of the user's in it",
-    #vim.fn.readdir(env.CODEX_HOME) == 1,
+    "...and nothing else of the user's in it but the login's lock",
+    vim.deep_equal(vim.fn.readdir(env.CODEX_HOME), { "auth.json", "auth.lock" }),
     vim.inspect(vim.fn.readdir(env.CODEX_HOME))
   )
   check("the write hooks are pointed at the socket", env.FIELDGUIDE_MCP_SOCKET == o.mcp_socket)
@@ -175,11 +175,15 @@ do
   local home = h.env(o).CODEX_HOME
   check("its home is writable: sessions, the thread store", vim.tbl_contains(needs.rw, home))
   check("...and the login file itself, written in place", vim.tbl_contains(needs.rw, user_home .. "/auth.json"))
+  -- Codex 0.164 locks auth.lock around writing the login. One lock shared with
+  -- the user's own Codex, not one of fieldguide's, or both may refresh at once.
+  check("the login's lock is the user's, linked", vim.uv.fs_readlink(home .. "/auth.lock") == user_home .. "/auth.lock")
+  check("...and bound, to be locked from inside", vim.tbl_contains(needs.rw, user_home .. "/auth.lock"))
   check(
     "not the rest of the user's Codex home",
     not vim.tbl_contains(needs.rw, user_home) and not vim.tbl_contains(needs.ro, user_home)
   )
-  check("nothing else of fieldguide's is writable to the agent", #needs.rw == 3, vim.inspect(needs.rw))
+  check("nothing else is writable to the agent: home, login, lock, shell home", #needs.rw == 4, vim.inspect(needs.rw))
   local node = vim.uv.fs_realpath(vim.fn.exepath("node"))
   if node then
     check(

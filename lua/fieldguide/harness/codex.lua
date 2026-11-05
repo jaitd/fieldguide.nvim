@@ -195,7 +195,13 @@ end
 ---memories and sessions are not there to be read, and the login is not a
 ---copy. Codex writes auth.json in place, through the link, so a refreshed
 ---token lands in the user's file.
----@return string home, string? login the user's auth.json, when there is one
+---
+---auth.lock is linked the same way. Since 0.164 Codex takes a lock on it
+---around each write of the login, and only one lock shared with the user's
+---own Codex keeps two token refreshes from writing over each other. Codex
+---creates it if missing and never removes it, so it is created here first,
+---as Codex would, to have a file to link and bind.
+---@return string home, string? login the user's auth.json, when there is one, string? lock
 function M.codex_home()
   local home = M.state_dir() .. "/home"
   vim.fn.mkdir(home, "p")
@@ -203,12 +209,26 @@ function M.codex_home()
   if not vim.uv.fs_stat(login) then
     return home, nil
   end
-  local link = home .. "/auth.json"
-  if vim.uv.fs_readlink(link) ~= login then
-    vim.uv.fs_unlink(link)
-    vim.uv.fs_symlink(login, link)
+  local function link(target, name)
+    local at = home .. "/" .. name
+    if vim.uv.fs_readlink(at) ~= target then
+      vim.uv.fs_unlink(at)
+      vim.uv.fs_symlink(target, at)
+    end
   end
-  return home, login
+  link(login, "auth.json")
+  local lock = user_home() .. "/auth.lock"
+  if not vim.uv.fs_stat(lock) then
+    local fd = vim.uv.fs_open(lock, "a", tonumber("600", 8))
+    if fd then
+      vim.uv.fs_close(fd)
+    end
+  end
+  if not vim.uv.fs_stat(lock) then
+    return home, login
+  end
+  link(lock, "auth.lock")
+  return home, login, lock
 end
 
 -- Read back from the end of a log in pieces this size: the model is in the
@@ -510,11 +530,13 @@ function M.needs(o)
   local node = node_bin(o)
   add(ro, node and vim.fs.dirname(vim.fs.dirname(node)) or nil)
 
-  local home, login = M.codex_home()
+  local home, login, lock = M.codex_home()
   -- Sessions, the thread store and the model cache; and the login itself,
-  -- bound as the file the link in `home` names, written in place.
+  -- bound as the file the link in `home` names, written in place, with the
+  -- lock the user's own Codex takes around writing it.
   add(rw, home)
   add(rw, login)
+  add(rw, lock)
   add(rw, M.shell_home())
   return { ro = ro, rw = rw }
 end
