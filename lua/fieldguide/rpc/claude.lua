@@ -29,6 +29,9 @@ local M = {}
 -- display: "blocked by fieldguide: outside fieldguide's zones: …" is the part a
 -- person needs to read.
 local HOOK_DENIED = "^PreToolUse:[%w_]+ hook error: "
+-- Since 2.1.295 Claude may name the hook's command after that prefix, as
+-- `[<command>]: `, which is no part of the reason either.
+local HOOK_COMMAND = "^%[.-%]: "
 local OURS = "blocked by fieldguide: "
 
 local MCP_PREFIX = "mcp__fieldguide__"
@@ -319,7 +322,7 @@ function Normaliser:_user(raw)
       local is_error = block.is_error == true
       local blocked = false
       if is_error and text and text:match(HOOK_DENIED) then
-        text = text:gsub(HOOK_DENIED, "", 1)
+        text = text:gsub(HOOK_DENIED, "", 1):gsub(HOOK_COMMAND, "", 1)
         blocked = vim.startswith(text, OURS)
       end
 

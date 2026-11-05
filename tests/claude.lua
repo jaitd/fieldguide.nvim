@@ -343,6 +343,21 @@ do
   check("another hook's refusal is not claimed as the gate's", e.blocked == false and e.text == "something else")
 end
 
+do
+  -- 2.1.295 and later may name the hook's command between prefix and reason.
+  local out = run({
+    tool_use("r", "Read", { file_path = "/etc/passwd" }),
+    tool_result(
+      "r",
+      "PreToolUse:Read hook error: ['/node' '/hook.ts' pre || exit 2]: blocked by fieldguide: outside",
+      true
+    ),
+  })
+  local e = of_kind(out, "tool_end")[1]
+  check("the gate's refusal is still the gate's with its command named", e.blocked == true, vim.inspect(e))
+  check("…and the command is not shown", e.text == "blocked by fieldguide: outside", e.text)
+end
+
 check("an unknown line is kept, not dropped", run({ { type = "brand_new" } })[1].kind == "unknown")
 
 -- ---------------------------------------------------------------------------
@@ -430,6 +445,8 @@ check(
   pre.hooks[1].command
 )
 check("…on an absolute node", vim.startswith(pre.hooks[1].command, "'/"), pre.hooks[1].command)
+-- Otherwise a gate that times out, or exits oddly, is a non-blocking error.
+check("…and its failure blocks the tool", pre.hooks[1].onFailure == "block", vim.inspect(pre.hooks[1]))
 do
   -- The gate's command as Claude runs it, with a node that cannot start: a
   -- non-blocking error would let the tool run ungated; exit 2 refuses it.
@@ -481,14 +498,27 @@ do
   -- about a machine without Claude installed.
   local bin = scratch .. "/bin"
   vim.fn.mkdir(bin, "p")
-  vim.fn.writefile({ "#!/bin/sh" }, bin .. "/claude")
-  vim.uv.fs_chmod(bin .. "/claude", tonumber("755", 8))
+  local function claude_says(version)
+    vim.fn.writefile({ "#!/bin/sh", ("echo '%s'"):format(version) }, bin .. "/claude")
+    vim.uv.fs_chmod(bin .. "/claude", tonumber("755", 8))
+  end
   local path = vim.env.PATH
   vim.env.PATH = bin .. ":" .. path
   local function refused(node, pattern)
     local err = h.preflight(vim.tbl_extend("force", o, { node = node }))
     return err ~= nil and (pattern == nil or err:find(pattern, 1, true) ~= nil), err
   end
+
+  -- Older ones may drop a settings file they cannot validate, gate and all.
+  claude_says("2.1.313 (Claude Code)")
+  check("preflight refuses a Claude Code older than the floor", refused(vim.fn.exepath("node"), "2.1.313"))
+  claude_says("2.0.999 (Claude Code)")
+  check("…by its minor too", refused(vim.fn.exepath("node"), "2.0.999"))
+  claude_says("something 9.9.9")
+  check("…and one that does not say it is Claude Code", refused(vim.fn.exepath("node"), "cannot tell"))
+  claude_says("2.2.0 (Claude Code)")
+  check("a newer minor passes the version check", not select(2, refused(vim.fn.exepath("node"))))
+  claude_says("2.1.318 (Claude Code)")
 
   check("preflight refuses to launch without node for the hooks", refused("", "not on PATH"))
   -- Any non-empty string used to pass, and Claude treats a hook that cannot

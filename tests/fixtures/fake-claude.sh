@@ -10,6 +10,10 @@
 # given with --resume, or a new one.
 
 set -u
+if [ "${1:-}" = "--version" ]; then
+  echo "2.1.318 (Claude Code)"
+  exit 0
+fi
 session="s-new"
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
