@@ -58,7 +58,16 @@ do
   check("the system prompt is ours", c.instructions[1] == o.system_prompt)
 
   -- v2's names: a shell is `shell`, a subagent is `subagent`.
-  for _, tool in ipairs({ "shell", "webfetch", "websearch", "subagent", "skill", "question" }) do
+  for _, tool in ipairs({
+    "shell",
+    "webfetch",
+    "websearch",
+    "subagent",
+    "skill",
+    "question",
+    "image_generate",
+    "experimental_image_generate",
+  }) do
     check(("%s is switched off"):format(tool), c.tools[tool] == false)
   end
   check("a shell is denied as well as hidden", c.permission.shell == "deny")

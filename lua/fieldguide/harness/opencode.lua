@@ -171,6 +171,10 @@ function M.config(o)
       skill = false,
       -- Asks the user, through a UI fieldguide does not show.
       question = false,
+      -- Image generation: opt-in in 2.2.1, on by default from 2.2.2 when a
+      -- provider can make images, under the second name.
+      image_generate = false,
+      experimental_image_generate = false,
     },
     permission = {
       shell = "deny",
