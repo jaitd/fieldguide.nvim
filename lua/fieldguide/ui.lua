@@ -59,6 +59,7 @@ function M.argv()
   if o.model then
     vim.list_extend(argv, { "--model", o.model })
   end
+  vim.list_extend(argv, require("fieldguide.harness.pi").builtins(o.model and o.provider, o.model))
   return argv
 end
 

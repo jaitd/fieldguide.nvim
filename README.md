@@ -86,7 +86,7 @@ network too, but they can read nothing outside those same zones.
 
 | Agent | Version | Notes |
 |---|---|---|
-| [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) | 0.79 or newer | the default. `npm install -g @earendil-works/pi-coding-agent`, then `pi --list-models` and `pi auth check --provider <name>` check it can reach a model |
+| [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) | 0.99 or newer | the default. `npm install -g @earendil-works/pi-coding-agent`, then `pi --list-models` and `pi auth check --provider <name>` check it can reach a model |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | 2.1.314 or newer | your login, or `ANTHROPIC_API_KEY` |
 | [opencode](https://opencode.ai) | 2.x | `npm install -g @opencode/cli` (the older `opencode-ai` package is 1.x, which is not supported). Uses your opencode login and providers, and its sessions appear in your opencode history |
 | [Codex](https://github.com/openai/codex) | 0.160 or newer | runs only inside the sandbox. Needs a file login: set `cli_auth_credentials_store = "file"` in `~/.codex/config.toml`, then `codex login` |

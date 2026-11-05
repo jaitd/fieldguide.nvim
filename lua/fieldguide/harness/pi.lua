@@ -9,7 +9,21 @@ local M = {}
 
 M.name = "pi"
 
-M.MIN_VERSION = { 0, 79, 0 }
+-- 0.99: `--no-extensions` turns off pi's built-in extensions too, and
+-- `-e builtin:<name>` loads one back, which `builtins()` relies on.
+M.MIN_VERSION = { 0, 99, 0 }
+
+---The built-in extensions a model needs back, after `--no-extensions` turned
+---them all off. Only llama.cpp: it is a provider, so a model the wizard
+---listed would not run without it. The rest (MCP, code mode, tool search)
+---stay off, as the hermetic launch wants.
+---@param provider string?
+---@param model string?
+---@return string[] argv to append
+function M.builtins(provider, model)
+  local llama = provider == "llama.cpp" or (provider == nil and vim.startswith(model or "", "llama.cpp/"))
+  return llama and { "--extension", "builtin:llama.cpp" } or {}
+end
 
 ---Launch-time problems, said before a process is spawned: no pi, or one too
 ---old for the extension. A version that cannot be read is let through, since

@@ -136,6 +136,18 @@ do
   cfg.setup({ provider = "openrouter", model = "m" })
   local paired = table.concat(require("fieldguide.rpc").argv(), " ")
   check("...but is with a model", paired:find("--provider openrouter --model m", 1, true) ~= nil, paired)
+  check("no built-in extension comes back for a hosted model", not paired:find("builtin:", 1, true), paired)
+  -- --no-extensions turns off pi's built-ins, llama.cpp's provider among them.
+  cfg.setup({ provider = "llama.cpp", model = "qwen" })
+  local llama = table.concat(require("fieldguide.rpc").argv(), " ")
+  check("a llama.cpp model gets its provider back", llama:find("--extension builtin:llama.cpp", 1, true) ~= nil, llama)
+  check("...and only that one", select(2, llama:gsub("builtin:", "")) == 1, llama)
+  cfg.setup({ model = "llama.cpp/qwen" })
+  llama = table.concat(require("fieldguide.rpc").argv(), " ")
+  check("...named in the model too", llama:find("builtin:llama.cpp", 1, true) ~= nil, llama)
+  cfg.setup({ provider = "llama.cpp", model = "qwen" })
+  llama = table.concat(ui.argv(), " ")
+  check("...and in the sidebar", llama:find("--extension builtin:llama.cpp", 1, true) ~= nil, llama)
   cfg.setup({})
   check("no bash in the tool allowlist", not argv:find("bash"), argv)
   for _, flag in ipairs({ "--no-extensions", "--no-skills", "--no-prompt-templates" }) do
